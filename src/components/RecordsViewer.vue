@@ -1,0 +1,161 @@
+<template>
+<div>
+  <div v-if="!haveRecords">No Records in Service</div>
+
+  <div v-else-if="!haveFields" style="text-align:center;margin-top:40px">
+    <div style="margin-bottom:10px">
+      Click button to add some fields for display:
+    </div>
+    <el-button
+      type="primary" icon="el-icon-plus"
+      @click="handleSelectFields"
+    >
+      Add Fields
+    </el-button>
+  </div>
+
+  <template v-else>
+  <el-table style="width:100%" :stripe="true"
+    :data="records"
+    row-key="_id"
+    :show-header="true"
+    :border="true"
+    :height="height"
+    @row-click="_handleRowClick"
+    @selection-change="_handleSelectionChange"
+  >
+    <el-table-column type="selection" width="50" />
+    <el-table-column
+      v-for="field in fields"
+      :prop="field.property"
+      :key="field.property"
+      :label="field.property"
+      :formatter="formatFieldData"
+      resizable
+    />
+  </el-table>
+  </template>
+</div>
+</template>
+
+<script lang="ts">
+// Libs
+import Vue from 'vue'
+
+// Components
+import FGuiCtrl from '../controllers/feathers-gui-ctrl'
+
+// Utils
+import { packPropertyTypeStruct } from '@/utils/data-utils'
+
+// Constants / Interfaces
+import {
+  DataRecord,
+  FeathersRecord,
+  PropertyLookupHash,
+  SelectServiceFieldsDialogData,
+  IServiceConnection,
+  ServiceFieldsStruct
+} from '@/interfaces'
+
+export default Vue.extend({
+
+  props: ['serviceConnection'],
+
+  data() {
+    return {
+      height: 460,
+    }
+  },
+
+  computed: {
+
+    records() : FeathersRecord[] {
+      const { serviceConnection } = this
+      return serviceConnection.records
+    },
+
+    haveRecords() : boolean {
+      const { records } = this
+      return (records.length > 0)
+    },
+
+    fields() : ServiceFieldsStruct[] {
+      const { serviceConnection } = this
+      return serviceConnection.fields || []
+    },
+
+    haveFields() : boolean {
+      const { fields } = this
+      return (fields.length > 0)
+    },
+
+    propertyTypeLookup() : PropertyLookupHash {
+      const fields = this.fields
+      return packPropertyTypeStruct(fields)
+    },
+
+  },
+
+  methods: {
+
+    _handleRowClick(record:FeathersRecord) {
+      const { serviceConnection } = this
+      const { _id: id } = record
+      serviceConnection.setSelectedRecord(record)
+    },
+
+    _handleSelectionChange(selectedRows: FeathersRecord[]) {
+      const { serviceConnection } = this
+      serviceConnection.selectedRecords = selectedRows
+    },
+
+    formatFieldData(record: any, column:{ label:string }) {
+      const { propertyTypeLookup: lookup } = this
+      const { label } = column // eg, 'account_id'
+      const type = lookup[ label ]
+
+      let data = record[ label ] // eg, '3425325'
+      data = (data === undefined) ? '<undefined>' : data
+
+      let result
+      // TODO: put in data formatters
+
+      switch (type) {
+        case 'number':
+          result = data
+          break
+        case 'string':
+          result = data.toString()
+          result = (result === '') ? '<empty>' : result
+          break
+        case 'array':
+        case 'boolean':
+        case 'date':
+        case 'object':
+        case 'relation':
+        default:
+          result = data.toString()
+          break
+      }
+      return result
+    },
+
+    handleSelectFields() {
+      const { serviceConnection } = this
+
+      const record = serviceConnection.getRepresentativeRecord({ cleanId: false })
+      const success = (fields:DataRecord) => {
+        serviceConnection.updateFields(fields)
+      }
+      const data: SelectServiceFieldsDialogData = {
+        record,
+        serviceConnection,
+      }
+      FGuiCtrl.showSelectServiceFieldsDialog({ data })
+    },
+
+  },
+
+})
+</script>
