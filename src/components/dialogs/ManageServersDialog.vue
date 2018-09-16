@@ -115,10 +115,7 @@ export default Vue.extend({
 
     getServerConnectionByServerId(serverId:string) : IServerConnection | null {
       const getSrvrConnByIdFunc = this.$store.getters['getServerConnectionByServerId']
-      const r = getSrvrConnByIdFunc(serverId)
-      console.log('get server', r)
-
-      return r
+      return getSrvrConnByIdFunc(serverId)
     },
 
     _handleAddNewServer() {

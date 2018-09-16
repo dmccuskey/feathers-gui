@@ -104,9 +104,8 @@ export default Vue.extend({
           srvrConn.addService(addServiceProps)
         }
       }
-      const cancel = () => console.log('CANCEL add service dialog')
 
-      FGuiCtrl.showAddServiceDialog({ success, cancel })
+      FGuiCtrl.showAddServiceDialog({ success })
     },
 
     _handleRemoveService(service: IServiceConnection) {

@@ -95,7 +95,6 @@ export default Vue.extend({
   },
 
   created() {
-    console.log('createsd stu', this.data)
     const data = this.data || {}
     const { serverForm } = this
     serverForm.url = data.url || ''
