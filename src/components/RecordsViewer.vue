@@ -1,8 +1,20 @@
 <template>
 <div>
-  <div v-if="!haveRecords">No Records in Service</div>
+  <div
+    v-if="serviceId === null"
+  >
+    no service selected
+  </div>
 
-  <div v-else-if="!haveFields" style="text-align:center;margin-top:40px">
+  <div
+    v-else-if="!haveRecords"
+  >
+    No Records in Service
+  </div>
+
+  <div style="text-align:center;margin-top:40px"
+    v-else-if="!haveFields"
+  >
     <div style="margin-bottom:10px">
       Click button to add some fields for display:
     </div>
@@ -60,7 +72,7 @@ import {
 
 export default Vue.extend({
 
-  props: ['serviceConnection'],
+  props: ['serviceConnection', 'serviceId'],
 
   data() {
     return {
@@ -69,16 +81,6 @@ export default Vue.extend({
   },
 
   computed: {
-
-    records() : FeathersRecord[] {
-      const { serviceConnection } = this
-      return serviceConnection.records
-    },
-
-    haveRecords() : boolean {
-      const { records } = this
-      return (records.length > 0)
-    },
 
     fields() : ServiceFieldsStruct[] {
       const { serviceConnection } = this
@@ -93,6 +95,16 @@ export default Vue.extend({
     propertyTypeLookup() : PropertyLookupHash {
       const fields = this.fields
       return packPropertyTypeStruct(fields)
+    },
+
+    records() : FeathersRecord[] {
+      const { serviceConnection } = this
+      return serviceConnection.records
+    },
+
+    haveRecords() : boolean {
+      const { records } = this
+      return (records.length > 0)
     },
 
   },

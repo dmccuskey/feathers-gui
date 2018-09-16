@@ -8,6 +8,7 @@
   <el-col :span="12">
     <service-viewer
       :serverConnection="currentServerConnection"
+      :serviceId="currentServiceId"
     />
   </el-col>
   <el-col :span="6">

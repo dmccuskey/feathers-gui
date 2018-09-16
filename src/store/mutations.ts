@@ -1,3 +1,7 @@
+/*
+  Vuex Mutations
+*/
+
 // Libs
 import Vue from 'vue'
 import { MutationTree } from 'vuex'
@@ -64,13 +68,13 @@ const mutations: MutationTree<RootState> = {
     Vue.set(services, id, payload)
   },
 
-  updateService(state, payload: ServiceStruct) {
+  updateService(state, payload:ServiceStruct) {
     const { services } = state
     const { id } = payload
     Vue.set(services, id, payload)
   },
 
-  removeServiceById(state, payload) {
+  removeServiceById(state, payload:ServiceStruct) {
     const { services } = state
     const { id } = payload
     Vue.delete(services, id)

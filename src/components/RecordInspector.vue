@@ -2,7 +2,9 @@
 <div id="record-inspector">
   <div class="section-title">Record Inspector</div>
 
-  <div v-if="noRecordAvail">No Record to Display</div>
+  <div v-if="recordId === null">no service selected</div>
+
+  <div v-else-if="noRecordAvail">No Record to Display</div>
 
   <template v-else>
   <div style="text-align:center;">
@@ -55,7 +57,11 @@
 import Vue from 'vue'
 
 // Constants / Interfaces
-import { DataRecord, IServiceConnection, FeathersRecord } from '@/interfaces'
+import {
+  DataRecord,
+  FeathersRecord,
+  IServiceConnection
+} from '@/interfaces'
 
 // Utils
 import {
@@ -67,15 +73,15 @@ import {
 
 export default Vue.extend({
 
-  props: ['serviceId', 'recordId', 'serverConnection'],
+  props: ['recordId', 'serverConnection', 'serviceId'],
 
   data() {
     return {
-      textAreaStr: '',
       jsonStr: '',
-      showPrettyPrint: true,
-      isValid: true,
       inReset: false,
+      isValid: true,
+      showPrettyPrint: true,
+      textAreaStr: '',
     }
   },
 

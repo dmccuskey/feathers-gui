@@ -21,6 +21,28 @@ const actions: ActionTree<RootState, RootState> = {
     Vue.set(services, id, clone)
   },
 
+  setCurrentServer({ state, dispatch, commit }, payload) {
+    const id = (payload) ? payload.id : null
+    const { currentServerId } = state
+    commit('setCurrentServer', payload)
+
+    if (id === null || currentServerId !== id) {
+      // reset other selections
+      dispatch('setCurrentService', null)
+    }
+  },
+
+  setCurrentService({ state, commit }, payload) {
+    const id = (payload) ? payload.id : null
+    const { currentServiceId } = state
+    commit('setCurrentService', payload)
+
+    if (id === null || currentServiceId !== id) {
+      // reset other selections
+      commit('setCurrentRecord', null)
+    }
+  },
+
 }
 
 export default actions
