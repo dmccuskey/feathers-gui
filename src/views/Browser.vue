@@ -1,5 +1,5 @@
 <template>
-<div id="browser">
+<div id="browser-view">
   <feathers-gui-support />
   <app-header />
   <app-main />
@@ -31,7 +31,7 @@ export default Vue.extend({
 </script>
 
 <style lang="scss">
-#browser {
+#browser-view {
   font-family: 'Avenir', Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
