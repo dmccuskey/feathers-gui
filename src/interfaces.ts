@@ -1,3 +1,7 @@
+/*
+  core interfaces
+*/
+
 // Libs
 import Vue from 'vue'
 import { Service } from '@feathersjs/feathers'
@@ -97,11 +101,22 @@ export interface IServerConnectionData {
   urlValue: string
   authentication: null
 
+  socket: SocketIOClient.Socket | null,
   isInitialized: boolean
+  isConnected: boolean
   saveTimerRef: NodeJS.Timer | null
   selectedService: IServiceConnection | null
   serviceConnections: IServiceConnectionsHash
 }
+
+export interface IServerConnectionEvent<T> {
+  target: IServerConnection
+  name: string
+  data: T
+}
+
+export interface IServerConnectionIsInitializedEvent extends IServerConnectionEvent<boolean> {}
+export interface IServerConnectionIsConnectedEvent extends IServerConnectionEvent<boolean> {}
 
 export interface AddServiceProps {
   path: string

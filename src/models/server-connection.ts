@@ -14,16 +14,28 @@ import socketio from '@feathersjs/socketio-client'
 import store from '@/store'
 
 // Constants / Interfaces
-import { ServerStruct, IServerConnection, Listener, DataRecord, ServerProps, IServiceConnectionData, IServerConnectionData, AddServiceProps, ServiceStruct, IServiceConnection } from '@/interfaces'
-import { FeathersEvents } from '@/app-constants'
+import {
+  AddServiceProps,
+  DataRecord,
+  Listener,
+  IServerConnection,
+  IServerConnectionData,
+  ServerProps,
+  ServerStruct,
+  ServiceStruct,
+  IServiceConnection,
+  IServerConnectionEvent
+} from '@/interfaces'
+import { FeathersEvents, ServerConnectionEvents } from '@/app-constants'
 import { createServiceStruct } from '@/utils/data-utils'
 import { createServiceConnection, destroyServiceConnection } from '@/models/service-connection'
 
 interface CreateSocketProps {
   url: string;
 }
-function createSocket(props: CreateSocketProps) {
+function createSocket(props: CreateSocketProps) : SocketIOClient.Socket {
   const { url } = props
+  const s = io(url)
   return io(url, {
     transports: ['websocket'],
     // forceNew: true,
@@ -58,6 +70,8 @@ export const ServerConnectionClass = Vue.extend({
       authentication: null,
 
       isInitialized: false,
+      isConnected: false,
+      socket: null,
       saveTimerRef: null,
       selectedService: null,
       serviceConnections: {},
@@ -97,10 +111,6 @@ export const ServerConnectionClass = Vue.extend({
       return Object.values(serviceConnections).sort(function(a, b) {
         return (a.path < b.path) ? -1 : 1
       })
-    },
-
-    isReady() {
-      return this.isInitialized
     },
 
   },
@@ -237,8 +247,8 @@ export const ServerConnectionClass = Vue.extend({
 
       if (client && url !== '') {
         const socket = createSocket({ url })
-        console.warn('Initializing Server Connection', url, socket)
-
+        this.socket = socket
+        this._setupSocketListeners()
         client.configure(socketio(socket))
       } else {
         console.warn('ERR Server Connection', url, client)
@@ -267,9 +277,7 @@ export const ServerConnectionClass = Vue.extend({
 
     _createServiceConnection(service: ServiceStruct) {
       const { serviceConnections } = this
-      const { id, path } = service
-      console.log('SRVR CONNN _createServiceConnection', path)
-
+      const { id } = service
       const srvcConn : IServiceConnection = createServiceConnection(this, service)
       this.$set(serviceConnections, id, srvcConn)
     },
@@ -287,18 +295,46 @@ export const ServerConnectionClass = Vue.extend({
     _loadServices() {
       const { servicesList } = this
       servicesList.forEach(item => {
-        const { id } = item
-        console.log('SRVR CONN checkinng', id)
         this._createServiceConnection(item)
       })
+    },
+
+    _handleSocketConnect() {
+      const { IS_CONNECTED } = ServerConnectionEvents
+      const isConnected = true
+      this.isConnected = isConnected
+      const event = this._createEvent<boolean>(IS_CONNECTED, isConnected)
+      this._emitEvent(event)
+    },
+
+    _createEvent<T>(name:string, data:any) : IServerConnectionEvent<T> {
+      return { target: this, name, data }
+    },
+
+    _emitEvent(event:IServerConnectionEvent<any>) {
+      const { name } = event
+      this.$emit(name, event)
+    },
+
+    _setupSocketListeners() {
+      const { socket } = this
+      if (socket) {
+        socket.on('connect', this._handleSocketConnect)
+      }
+    },
+
+    _removeListeners() {
+
     },
 
   },
 
   watch: {
 
-    isReady(newVal) {
-      this.$emit('isReady', newVal)
+    isInitialized(newVal:boolean) {
+      const { IS_INITIALIZED } = ServerConnectionEvents
+      const event = this._createEvent<boolean>(IS_INITIALIZED, newVal)
+      this._emitEvent(event)
     },
 
     selectedService(newVal: IServiceConnection | null) {
@@ -310,7 +346,7 @@ export const ServerConnectionClass = Vue.extend({
   created() {
     const { data } = this
 
-    console.log(`Srvr Creating server connection: ${data.url}`)
+    console.warn(`SRVR CONN Created: ${data.url}`)
 
     this.updateServer(data) // save initial state
     this._loadServices()

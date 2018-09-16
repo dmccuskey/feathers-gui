@@ -7,6 +7,7 @@ import {
   FeathersRecord,
   GetRepresentativeRecordProps,
   IServerConnection,
+  IServerConnectionIsInitializedEvent,
   IServiceConnection,
   IServiceConnectionData,
   ServiceFieldsStruct,
@@ -26,6 +27,7 @@ import {
   createRepresentativeRecord,
   unpackPropertyTypeStruct
 } from '@/utils/data-utils'
+import { ServerConnectionEvents } from '@/app-constants'
 
 export const ServiceConnectionClass = Vue.extend({
 
@@ -84,6 +86,10 @@ export const ServiceConnectionClass = Vue.extend({
     serverId() : string {
       const { serverConnection } = this
       return serverConnection.id
+    },
+
+    currentServiceId() : string | null {
+      return store.getters['currentServiceId']
     },
 
   },
@@ -207,11 +213,8 @@ export const ServiceConnectionClass = Vue.extend({
 
     _loadRecords() {
       const { params, serverConnection, path } = this
-      // console.log(`SRVC CONN loading initial records`)
-
       const processResults = (function(self) {
         return function(records:any[]) {
-          // console.log(`SRVC CONN found ${records.length} records`, records)
           records.forEach(function(record) {
             const item = cloneFeathersRecord(record)
             self.records.push(item)
@@ -226,45 +229,46 @@ export const ServiceConnectionClass = Vue.extend({
         .catch((err:any) => console.warn('err', err))
     },
 
-    _handleServerIsReady(isReady:boolean) {
-      // console.warn('SRVC CONN server is ready', isReady)
-      if (isReady) {
-        this._doServerIsReadyActions()
+    _handleServerIsInitialized(event:IServerConnectionIsInitializedEvent) {
+      const { data, target } = event
+      // console.warn('SRVC CONN server is ready', data)
+      if (data) {
+        this._doServerIsInitializedActions()
       } else {
-        this._doServerNotReadyActions()
+        this._doServerNotInitializedActions()
       }
     },
 
     _setupListeners() {
+      const { IS_INITIALIZED } = ServerConnectionEvents
       const { serverConnection } = this
-      serverConnection.$on('isReady', this._handleServerIsReady)
+      serverConnection.$on(IS_INITIALIZED, this._handleServerIsInitialized)
     },
 
     _removeListeners() {
+      const { IS_INITIALIZED } = ServerConnectionEvents
       const { serverConnection } = this
-      serverConnection.$off('isReady', this._handleServerIsReady)
+      serverConnection.$off(IS_INITIALIZED, this._handleServerIsInitialized)
     },
 
-    _doServerIsReadyActions() {
-      // console.warn('SRVC CONN _doServerReadyActions')
+    _doServerIsInitializedActions() {
       this._loadRecords()
-      this._setupServerReadyListeners()
+      this._setupServerInitListeners()
     },
 
-    _doServerNotReadyActions() {
-      console.warn('SRVC CONN _doServerNotReadyActions')
+    _doServerNotInitializedActions() {
       this._clearRecords()
-      this._removeServerReadyListeners()
+      this._removeServerInitListeners()
     },
 
-    _setupServerReadyListeners() {
+    _setupServerInitListeners() {
       const { serverConnection } = this
       serverConnection.onCreated(this.path, this._handleOnCreated)
       serverConnection.onRemoved(this.path, this._handleOnRemoved)
       serverConnection.onUpdated(this.path, this._handleOnUpdated)
     },
 
-    _removeServerReadyListeners() {
+    _removeServerInitListeners() {
       const { serverConnection } = this
       serverConnection.offCreated(this.path, this._handleOnCreated)
       serverConnection.offRemoved(this.path, this._handleOnRemoved)
@@ -280,15 +284,24 @@ export const ServiceConnectionClass = Vue.extend({
         clearTimeout(saveTimerRef)
       }
       this.saveTimerRef = setTimeout(() => {
-        this._saveCurrentState()
+        this._saveServiceToStore()
         this.saveTimerRef = null
       }, 50)
     },
 
-    _saveCurrentState() {
+    _saveServiceToStore() {
+      // saveServiceToStore _removeCurrentState
       const { id, fields, filters, path, serverId } = this
       const srvcStruct: ServiceStruct = { id, fields, filters, path, serverId }
       store.commit('updateService', srvcStruct)
+    },
+
+    _removeServiceFromStore() {
+      const { id, currentServiceId } = this
+      store.commit('removeServiceById', { id })
+      if (id === currentServiceId) {
+        store.dispatch('setCurrentService', null)
+      }
     },
 
     _saveSelectedRecord() {
@@ -301,13 +314,12 @@ export const ServiceConnectionClass = Vue.extend({
   created() {
     const { data, serverConnection } = this
 
-    console.log(`SRVC CONN Creating service connection: ${data.path}`)
+    console.warn(`SRVC CONN Creating service connection: ${data.path}`)
 
     this.updateService(data) // save initial state
     this._setupListeners()
-    if (serverConnection.isReady) {
-      // console.log('SRVC CONN server isReady !!!!')
-      this._doServerIsReadyActions()
+    if (serverConnection.isInitialized) {
+      this._doServerIsInitializedActions()
     }
 
     this.isInitialized = true
@@ -315,8 +327,9 @@ export const ServiceConnectionClass = Vue.extend({
 
   beforeDestroy() {
     console.warn('SRVC CONN: beforeDestroy')
-    this._removeServerReadyListeners()
+    this._removeServerInitListeners()
     this._removeListeners()
+    this._removeServiceFromStore()
   },
 
 })

@@ -1,3 +1,8 @@
+/*
+  Feathers Gui Controller
+
+  main controller for the application
+*/
 // Libs
 import Vue from 'vue'
 
@@ -5,19 +10,19 @@ import Vue from 'vue'
 import store from '@/store'
 
 // Constants & Iterfaces
-import { DialogTypes } from '@/app-constants'
+import { DialogTypes, ServerConnectionEvents } from '@/app-constants'
 import {
   DataRecord,
   DisplayDialog,
-  ServerStruct,
+  IServerConnection,
+  IServerConnectionIsInitializedEvent,
   IServerConnectionsHash,
-  ServiceStruct,
-  IServiceConnection, IServiceConnectionsHash,
+  ServerProps,
+  ServerStruct,
+  IServiceConnectionsHash,
   ShowAddServiceDialogProps,
   ShowAddServiceRecordDialogProps,
-  ShowSelectServiceFieldsDialogProps,
-  IServerConnection,
-  ServerProps
+  ShowSelectServiceFieldsDialogProps
 } from '@/interfaces'
 
 // Utils
@@ -30,46 +35,71 @@ import {
   destroyServiceConnection
 } from '@/models/service-connection'
 import { createServerStruct, createServiceStruct } from '@/utils/data-utils'
-import { join } from 'path'
 
 const FeathersGuiCtrlClass = Vue.extend({
 
+  name: 'FeathersGuiCtrl',
+
+  data() {
+    return {
+
+      /*
+        hash of servers for which waiting for initialized signal
+        will be empty when all servers initialized
+
+        key'd on server id
+      */
+      waitServerInit: {
+        /*
+          'ngf5pec3s8g0': <server connection>,
+          '5f6rz3d8i6w0': <server connection>
+          ...
+        */
+      },
+
+    }
+  },
+
   computed: {
-
-    currentServerId() : string | null {
-      return store.getters['currentServerId']
-    },
-
-    serviceConnections() : IServiceConnectionsHash {
-      return store.getters['currentServiceConnections']
-    },
-
-    serverConnections() : IServerConnectionsHash {
-      return store.getters['currentServerConnections']
-    },
-
-    currentServerConnection() : IServerConnection | null {
-      const { currentServerId } = this
-      const getSrvrConnByIdFunc = store.getters['getServerConnectionByServerId']
-      return getSrvrConnByIdFunc(currentServerId)
-    },
 
     activeServerConnectionsList() : IServerConnection[] {
       const { serverConnections } = this
       return Object.values(serverConnections).filter(item => item.isActive)
     },
 
-    serviceConnectionsList() {
-      return store.getters['getServiceConnectionsList']
+    currentServerId() : string | null {
+      return store.getters['currentServerId']
+    },
+
+    serverConnections() : IServerConnectionsHash {
+      return store.getters['currentServerConnections']
+    },
+
+    serversAreInitialized() : boolean {
+      const { waitServerInit } = this
+      const list = Object.keys(waitServerInit)
+      return (list.length === 0)
     },
 
     serversList() : ServerStruct[] {
       return store.getters['getServersList']
     },
 
+    serviceConnections() : IServiceConnectionsHash {
+      return store.getters['currentServiceConnections']
+    },
+
+    serviceConnectionsList() {
+      return store.getters['getServiceConnectionsList']
+    },
+
   },
 
   methods: {
+
+    /*
+      Public Methods
+    */
 
     getServerConnectionByServerId(serverId:string) : IServerConnection | null {
       const getSrvrConnByIdFunc = store.getters['getServerConnectionByServerId']
@@ -79,7 +109,6 @@ const FeathersGuiCtrlClass = Vue.extend({
     addServer(props: ServerProps) {
       const { url, isActive } = props
       const srvrStruct = createServerStruct({ url, isActive })
-      // console.log('addServer struct', srvrStruct)
       store.commit('addServer', srvrStruct)
       this._createServerConnection(srvrStruct)
     },
@@ -90,32 +119,43 @@ const FeathersGuiCtrlClass = Vue.extend({
       this._removeServerConnection(server)
     },
 
-    addServerConnection(server: ServerStruct) {
-      const { id, url } = server
-      console.log('creating ServerConnection', id, url)
-      const srvrConnect = createServerConnection(server)
-      store.commit('addServerConnection', srvrConnect)
-    },
-
     selectServer(server: IServerConnection | null) {
-      store.commit('setCurrentServer', server)
+      store.dispatch('setCurrentServer', server)
     },
 
     /*
       Server support
     */
 
-    _createServerConnection(server: ServerStruct) {
-      const srvrConnect = createServerConnection(server)
-      console.log('creating ServerConnection', srvrConnect)
+    _handleServerIsInitialized(event:IServerConnectionIsInitializedEvent) {
+      const { waitServerInit } = this
+      const { target } = event
+      const { id } = target
+      Vue.delete(waitServerInit, id)
+    },
 
-      store.commit('addServerConnection', srvrConnect)
+    // _handleServerIsConnected(event:IServerConnectionIsConnectedEvent) {
+    //   console.warn('FGUI CTRL _handleServerIsConnected')
+    // },
+
+    _createServerConnection(server: ServerStruct) : IServerConnection {
+      const { IS_CONNECTED, IS_INITIALIZED } = ServerConnectionEvents
+      const srvrConn = createServerConnection(server)
+
+      // srvrConn.$on(IS_CONNECTED, this._handleServerIsConnected)
+      srvrConn.$on(IS_INITIALIZED, this._handleServerIsInitialized)
+
+      store.commit('addServerConnection', srvrConn)
+      return srvrConn
     },
 
     _removeServerConnection(server: ServerStruct | IServerConnection) {
+      const { IS_CONNECTED, IS_INITIALIZED } = ServerConnectionEvents
       const { id } = server
       const srvrConn = this.getServerConnectionByServerId(id)
       if (srvrConn) {
+        // srvrConn.$off(IS_CONNECTED, this._handleServerIsConnected)
+        srvrConn.$off(IS_INITIALIZED, this._handleServerIsInitialized)
         destroyServerConnection(srvrConn)
         store.commit('removeServerConnectionById', { id })
       }
@@ -207,12 +247,8 @@ const FeathersGuiCtrlClass = Vue.extend({
     },
 
     showAddEditServerDialog(record?:ServerStruct | IServerConnection) {
-      console.log('showAddEditServerDialog')
-
       const success = (serverInfo:DataRecord) => {
-        console.log('success showAddEditServerDialog', serverInfo)
         const { id, url, isActive, authentication } = serverInfo
-        console.log('back from add/edit', id)
 
         const props: ServerProps = { url, isActive, authentication }
         if (id === null) {
@@ -226,8 +262,6 @@ const FeathersGuiCtrlClass = Vue.extend({
         this.showManageServersDialog()
       }
       const cancel = () => {
-        console.log('cancel showAddEditServerDialog')
-        // store.commit('removeCurrentDialog')
         this.showManageServersDialog()
       }
 
@@ -240,9 +274,9 @@ const FeathersGuiCtrlClass = Vue.extend({
       store.commit('showDialog', payload)
     },
 
-    showSelectActiveServerDialog() {
-      console.log('showSelectActiveServerDialog')
-    },
+    /*
+      private methods
+    */
 
     _checkValidCurrentServerId() {
       const { currentServerId, activeServerConnectionsList: activeSrvrConn } = this
@@ -251,44 +285,27 @@ const FeathersGuiCtrlClass = Vue.extend({
       }
     },
 
+    // load server data from data store & create instances
+    _initializeServers() {
+      const { serversList, waitServerInit } = this
+      if (serversList.length === 0) {
+        store.dispatch('setCurrentServer', null)
+        this.showManageServersDialog()
+      } else {
+        serversList.forEach(item => {
+          const { id } = item
+          const srvrConn = this._createServerConnection(item)
+          Vue.set(waitServerInit, id, srvrConn)
+        })
+      }
+    },
+
   },
 
   watch: {
 
-    // servicesList(newVal:ServiceStruct[], oldVal:ServiceStruct[]) {
-    //   console.log('FGUI Watch servicesList', newVal)
-
-    //   if (newVal.length < oldVal.length) {
-    //     // remove service connection
-    //     oldVal
-    //       .filter(oS => !newVal.find(nS => nS.id === oS.id))
-    //       .forEach(service => this.removeServiceConnection(service))
-    //   } else if (newVal.length > oldVal.length) {
-    //     // create service connection
-    //     newVal
-    //       .filter(nS => !oldVal.find(oS => oS.id === nS.id))
-    //       .forEach(service => this.createServiceConnection(service))
-    //   } else {
-    //     // a service was updated
-    //     // services will update themselves and their stored data
-    //     // nothing to do here
-    //   }
-    // },
-
-    currentServerId(newVal, oldVal) {
-      console.log('FGUI Watch currentServerId', newVal, oldVal)
-    },
-
-    currentServerConnection(newVal, oldVal) {
-      console.log('FGUI Watch currentServerConnection', newVal, oldVal)
-    },
-
-    serverConnections(newVal, oldVal) {
-      console.log('FGUI Watch serverConnections', newVal, oldVal)
-    },
-
     activeServerConnectionsList(newVal:IServerConnection[]) {
-      console.log('FGUI Watch activeServerConnectionsList', newVal.length)
+      // console.log('FGUI Watch activeServerConnectionsList', newVal.length)
       if (newVal.length === 0) {
         this.showManageServersDialog()
       } if (newVal.length === 1) {
@@ -296,43 +313,17 @@ const FeathersGuiCtrlClass = Vue.extend({
       }
     },
 
+    serversAreInitialized(newVal:boolean) {
+      // console.warn('FGUI Watch serversAreInitialized', newVal)
+      if (newVal === true) {
+        this._checkValidCurrentServerId()
+      }
+    },
+
   },
 
   created() {
-    const { serversList, serviceConnections, serverConnections, currentServerConnection } = this
-    // console.log('ctrl created', serviceConnections, Object.keys(serviceConnections))
-    // console.log('ctrl created', servicesList)
-    // console.log('feathres build', serversList)
-
-    /*
-      load servers
-    */
-    serversList.forEach(item => {
-      const { id } = item
-      const srvrConn = this.getServerConnectionByServerId(id)
-      if (srvrConn === null) {
-        this._createServerConnection(item)
-      }
-    })
-
-    /*
-      load services
-    */
-    // servicesList.forEach(item => {
-    //   const { id } = item
-    //   // console.log('checkinng', id, serviceConnections[id])
-    //   const connection = serviceConnections[id] || null
-    //   if (connection === null) {
-    //     this.createServiceConnection(item)
-    //   }
-    // })
-
-    console.warn('mounted currentServerConnection', currentServerConnection)
-    if (currentServerConnection === null) {
-      // there is no server for this id, it must have been deleted
-      store.commit('setCurrentServer', { id: null })
-    }
-    this._checkValidCurrentServerId()
+    this._initializeServers()
   },
 
 })
