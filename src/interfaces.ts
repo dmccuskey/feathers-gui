@@ -214,12 +214,18 @@ export interface ServicesHash {
   [key:string] : ServiceStruct
 }
 
+export interface IServiceConnectionErrorStruct {
+  message: string
+  name: string
+  code: number
+}
 export interface IServiceConnectionData {
   fieldsValue: ServiceFieldsStruct[]
   filtersValue: DataRecord[]
   pathValue: string
 
   isInitialized: boolean
+  isError: IServiceConnectionErrorStruct | null
   params: any
   records: FeathersRecord[]
   representative: FeathersRecord
@@ -234,6 +240,8 @@ export interface IServiceConnection extends Vue, IServiceConnectionData {
   fields: any[]
   serverId: string
   // filters: any[]
+
+  isError: IServiceConnectionErrorStruct | null
 
   updateFields(fields:any) : void
   getRepresentativeRecord(props: GetRepresentativeRecordProps): any
@@ -250,4 +258,13 @@ export interface IServiceConnection extends Vue, IServiceConnectionData {
 
 export interface IServiceConnectionsHash {
   [key:string] : IServiceConnection
+}
+
+export interface FeathersError {
+  name: string // error name eg 'BadRequest'
+  message: string // error message string
+  code: number // http status
+  className: string // css style
+  data?: any
+  errors: any
 }

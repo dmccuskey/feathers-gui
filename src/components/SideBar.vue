@@ -1,5 +1,5 @@
 <template>
-<div>
+<div id="side-bar">
   <div class="section-title">Services</div>
 
   <table style="width:100%;padding-top:10px">
@@ -10,15 +10,25 @@
       :key="rec.path"
     >
       <td>
-      <el-button type="info" size="medium" style="width:100%;text-align:left;font-size:14px;font-family:courier"
-        @click="_handleSelectService( rec )"
-      >
-        {{rec.path}}
-      </el-button>
-      </td><td>
-      <el-button type="danger" plain size="small" icon="el-icon-delete" circle
-        @click="_handleRemoveService( rec )"
-      />
+        <el-tooltip effect="dark" :content="rec.isError.message" placement="right"
+          v-if="rec.isError"
+        >
+          <el-button class="btn-srvc" type="warning" plain size="medium" icon="el-icon-warning"
+          >
+            {{rec.path}}
+          </el-button>
+        </el-tooltip>
+        <el-button class="btn-srvc" type="info" size="medium"
+          @click="_handleSelectService( rec )"
+          v-else
+        >
+          {{rec.path}}
+        </el-button>
+      </td>
+      <td>
+        <el-button type="danger" plain size="small" icon="el-icon-delete" circle
+          @click="_handleRemoveService( rec )"
+        />
       </td>
     </tr>
   </table>
@@ -131,5 +141,13 @@ export default Vue.extend({
 })
 </script>
 
-<style>
+<style lang="scss" scoped>
+#side-bar {
+
+  .btn-srvc {
+    width: 100%;
+    text-align: left;
+    font-family: courier
+  }
+}
 </style>

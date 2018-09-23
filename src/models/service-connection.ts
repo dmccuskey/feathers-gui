@@ -4,6 +4,7 @@ import Vue from 'vue'
 // Constants / Interfaces
 import {
   DataRecord,
+  FeathersError,
   FeathersRecord,
   GetRepresentativeRecordProps,
   IServerConnection,
@@ -13,7 +14,8 @@ import {
   ServiceFieldsStruct,
   ServiceProps,
   ServiceStruct,
-  IServerConnectionIsConnectedEvent
+  IServerConnectionIsConnectedEvent,
+  IServiceConnectionErrorStruct
 } from '@/interfaces'
 
 // Components
@@ -43,6 +45,7 @@ export const ServiceConnectionClass = Vue.extend({
       pathValue: '',
 
       isInitialized: false,
+      isError: null,
       params: {},
       records: [],
       representative: { _id: '' },
@@ -244,7 +247,16 @@ export const ServiceConnectionClass = Vue.extend({
       serverConnection.find(path, params)
         .then((results:FeathersRecord) => results.data || [])
         .then(processResults)
-        .catch((err:any) => console.warn('SRVC CONN _loadRecords', err))
+        .catch((fError:FeathersError) => {
+          console.warn('SRVC CONN _loadRecords', fError)
+          const { name, message, code } = fError
+          const err: IServiceConnectionErrorStruct = {
+            code,
+            message,
+            name,
+          }
+          this.isError = err
+        })
     },
 
     _handleServerConnectedChange(event:IServerConnectionIsConnectedEvent) {
