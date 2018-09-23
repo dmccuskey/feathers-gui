@@ -358,6 +358,9 @@ export const ServiceConnectionClass = Vue.extend({
     if (serverConnection.isInitialized) {
       this._doServerIsInitializedActions()
     }
+    if (serverConnection.isConnected) {
+      this._doServerIsConnectedActions()
+    }
 
     this.isInitialized = true
   },
