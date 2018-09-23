@@ -161,17 +161,21 @@ export interface IServerConnection extends Vue {
 
   find(path:string, params?:any): Promise<any>
   create(path:string, jsonRec:any, params?:any): Promise<any>
+  patch(path:string, id:string, data:any, params?:any) : Promise<any>
   remove(path:string, id:string, params?:any) : Promise<any>
   update(path:string, id:string, data:any, params?:any) : Promise<any>
 
   // events
-  onCreated(path:string, callback:Listener) : Service<any>
-  offCreated(path:string, callback:Listener) : Service<any>
-  onRemoved(path:string, callback:Listener) : Service<any>
-  offRemoved(path:string, callback:Listener) : Service<any>
-  onUpdated(path:string, callback:Listener) : Service<any>
-  offUpdated(path:string, callback:Listener) : Service<any>
+  onCreated(path:string, callback:Listener) : void
+  offCreated(path:string, callback:Listener) : void
+  onRemoved(path:string, callback:Listener) : void
+  offRemoved(path:string, callback:Listener) : void
+  onUpdated(path:string, callback:Listener) : void
+  offUpdated(path:string, callback:Listener) : void
+  onPatched(path:string, callback:Listener) : void
+  offPatched(path:string, callback:Listener) : void
 }
+
 export interface IServerConnectionsHash {
   [key:string] : IServerConnection
 }

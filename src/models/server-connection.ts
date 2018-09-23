@@ -28,8 +28,14 @@ import {
   FeathersRecord,
   StateMachineEvent
 } from '@/interfaces'
-import { FeathersEvents, ServerConnectionEvents } from '@/app-constants'
-import { createServiceStruct } from '@/utils/data-utils'
+import {
+  FeathersEvents,
+  ServerConnectionEvents
+} from '@/app-constants'
+import {
+  createServiceEventKey,
+  createServiceStruct
+} from '@/utils/data-utils'
 import { createServiceConnection, destroyServiceConnection } from '@/models/service-connection'
 
 const StateMachine = require('javascript-state-machine')
@@ -245,28 +251,132 @@ export const ServerConnectionClass = Vue.extend({
 
     // Event Listeners
 
-    onCreated(path:string, callback:Listener) : Service<any> {
-      return this.service(path).on(FeathersEvents.CREATED, callback)
+    onCreated(path:string, callback:Listener) : void {
+      const key = createServiceEventKey(path, FeathersEvents.CREATED)
+      this._addServiceEventListener(key, callback)
+      this._verifyLocalEventListener(key)
     },
 
-    offCreated(path:string, callback:Listener) : Service<any> {
-      return this.service(path).removeListener(FeathersEvents.CREATED, callback)
+    offCreated(path:string, callback:Listener) : void {
+      const key = createServiceEventKey(path, FeathersEvents.CREATED)
+      this._removeServiceEventListener(key, callback)
     },
 
-    onRemoved(path:string, callback:Listener) : Service<any> {
-      return this.service(path).on(FeathersEvents.REMOVED, callback)
+    onRemoved(path:string, callback:Listener) : void {
+      const key = createServiceEventKey(path, FeathersEvents.REMOVED)
+      this._addServiceEventListener(key, callback)
+      this._verifyLocalEventListener(key)
     },
 
-    offRemoved(path:string, callback:Listener) : Service<any> {
-      return this.service(path).removeListener(FeathersEvents.REMOVED, callback)
+    offRemoved(path:string, callback:Listener) : void {
+      const key = createServiceEventKey(path, FeathersEvents.REMOVED)
+      this._removeServiceEventListener(key, callback)
     },
 
-    onUpdated(path:string, callback:Listener) {
-      return this.service(path).on(FeathersEvents.UPDATED, callback)
+    onUpdated(path:string, callback:Listener) : void {
+      const key = createServiceEventKey(path, FeathersEvents.UPDATED)
+      this._addServiceEventListener(key, callback)
+      this._verifyLocalEventListener(key)
     },
 
-    offUpdated(path:string, callback:Listener) {
-      return this.service(path).removeListener(FeathersEvents.UPDATED, callback)
+    offUpdated(path:string, callback:Listener) : void {
+      const key = createServiceEventKey(path, FeathersEvents.UPDATED)
+      this._removeServiceEventListener(key, callback)
+    },
+
+    onPatched(path:string, callback:Listener) : void {
+      const key = createServiceEventKey(path, FeathersEvents.PATCHED)
+      this._addServiceEventListener(key, callback)
+      this._verifyLocalEventListener(key)
+    },
+
+    offPatched(path:string, callback:Listener) : void {
+      const key = createServiceEventKey(path, FeathersEvents.PATCHED)
+      this._removeServiceEventListener(key, callback)
+    },
+
+    _addServiceEventListener(key:string, callback:Listener) {
+      const { serviceCallbacks } = this
+      const list = serviceCallbacks[key] || []
+      list.push(callback)
+      serviceCallbacks[key] = list
+    },
+
+    _removeServiceEventListener(key:string, callback:Listener) {
+      const { serviceCallbacks } = this
+      const list = serviceCallbacks[key] || []
+      const idx = list.findIndex(function(func) {
+        return (func === callback)
+      })
+      if (idx === -1) {
+        console.warn('GUI WARN: callback not found')
+      } else {
+        list.splice(idx, 1)
+      }
+      if (list.length === 0) {
+        delete serviceCallbacks[key]
+      }
+    },
+
+    _verifyLocalEventListener(key:string) {
+      const { localCallbacks } = this
+      if (localCallbacks[key] === undefined) {
+        const callback = this._createLocalEventListener(key)
+        localCallbacks[key] = callback
+
+        const client = this.loadClient()
+        if (client) {
+          // already have a client, so add new callback now
+          this._attachLocalListener(key, callback)
+        }
+      }
+    },
+
+    /*
+      create Server Local Callback Listener
+      local listener is callback that is attached to Feathers client
+      it proxies changes to stored Service Callback Listeners
+    */
+    _createLocalEventListener(key:string) : Listener {
+      return (data:FeathersRecord) => {
+        const { serviceCallbacks } = this
+        const list = serviceCallbacks[key] || []
+        list.forEach(serviceCallback => {
+          serviceCallback(data)
+        })
+      }
+    },
+
+    /*
+      loop through the local listeners and attach them to current Feathers client
+    */
+    _activateLocalEventListeners() {
+      const { localCallbacks } = this
+      Object.entries(localCallbacks).forEach(items => {
+        const [key, callback] = items
+        this._attachLocalListener(key, callback)
+      })
+    },
+
+    _attachLocalListener(key:string, callback:Listener) {
+      const [path, event] = key.split(':')
+      this.service(path).on(event, callback)
+    },
+
+    /*
+      loop through the local listeners and remove them from current Feathers client
+    */
+    _deactivateLocalEventListeners() {
+      const { localCallbacks } = this
+      Object.entries(localCallbacks).forEach(items => {
+        const [key, callback] = items
+        this._removeLocalListener(key, callback)
+      })
+    },
+
+    _removeLocalListener(key:string, callback:Listener) {
+      const [path, event] = key.split(':')
+      this.service(path).off(event, callback)
     },
 
     /*
@@ -432,28 +542,26 @@ export const ServerConnectionClass = Vue.extend({
     },
 
     _handleSocketConnect() {
-      console.warn('_handleSocketConnect')
       this.stateMachine.connectOk()
       this._clearError()
     },
 
     _handleSocketDisconnect() {
-      console.warn('_handleSocketDisconnect')
       this.stateMachine.connectErr()
       this._clearError()
     },
 
     _handleSocketConnectError() {
-      console.warn('_handleSocketConnectError')
       this.errorCount += 1
     },
-    _handleSocketConnectTimeout() {
-      console.warn('_handleSocketConnectTimeout')
-    },
 
-    _handleSocketError() {
-      console.warn('_handleSocketError')
-    },
+    // _handleSocketConnectTimeout() {
+    //   console.warn('_handleSocketConnectTimeout')
+    // },
+
+    // _handleSocketError() {
+    //   console.warn('_handleSocketError')
+    // },
 
     _createEvent<T>(name:string, data:any) : IServerConnectionEvent<T> {
       return { target: this, name, data }
@@ -470,8 +578,8 @@ export const ServerConnectionClass = Vue.extend({
         socket.on('connect', this._handleSocketConnect)
         socket.on('disconnect', this._handleSocketDisconnect)
         socket.on('connect_error', this._handleSocketConnectError)
-        socket.on('connect_timeout', this._handleSocketConnectTimeout)
-        socket.on('error', this._handleSocketError)
+        // socket.on('connect_timeout', this._handleSocketConnectTimeout)
+        // socket.on('error', this._handleSocketError)
       }
     },
 
@@ -481,7 +589,8 @@ export const ServerConnectionClass = Vue.extend({
         socket.off('connect', this._handleSocketConnect)
         socket.off('disconnect', this._handleSocketDisconnect)
         socket.off('connect_error', this._handleSocketConnectError)
-        socket.off('error', this._handleSocketError)
+        // socket.off('connect_timeout', this._handleSocketConnectTimeout)
+        // socket.off('error', this._handleSocketError)
       }
     },
 
@@ -576,19 +685,17 @@ export const ServerConnectionClass = Vue.extend({
           this.isConnected = true
 
           stateMachine.unsetRestartFlag()
-          // stateMachine.isRestarting = false // unset restart flag
         },
         onEnterDisconnecting: () => {
           // disconnect happens immediately so wait
           // until out of transition before starting another
-          // console.warn('onEnterDisconnecting')
           Vue.nextTick(() => this._doStateDisconnect())
         },
         onEnterDisconnected: () => {
+          console.warn('Socket is Disconnected')
           const { stateMachine } = this
           this.isConnected = false
 
-          console.warn('Socket is Disconnected', stateMachine.isRestarting)
           if (stateMachine.isRestarting) {
             Vue.nextTick(() => stateMachine.connect())
           }
@@ -609,7 +716,6 @@ export const ServerConnectionClass = Vue.extend({
         */
         onEnterRecovered: () => {
           const { stateMachine } = this
-          // console.warn('onEnterRecovered', stateMachine)
           Vue.nextTick(() => stateMachine.restart())
         },
 
@@ -618,13 +724,11 @@ export const ServerConnectionClass = Vue.extend({
         */
 
         setRestartFlag: () => {
-          // console.log('setRestartFlag')
           const { stateMachine } = this
           stateMachine.isRestarting = true
         },
 
         unsetRestartFlag: () => {
-          // console.log('unsetRestartFlag')
           const { stateMachine } = this
           stateMachine.isRestarting = false
         },
@@ -634,7 +738,8 @@ export const ServerConnectionClass = Vue.extend({
   },
 
   beforeDestroy() {
-    console.warn('SRVR CONN: beforeDestroy')
+    const { stateMachine } = this
+    stateMachine.disconnect()
   },
 
 })

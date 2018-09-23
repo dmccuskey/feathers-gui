@@ -102,6 +102,10 @@ export const createFindItemId = function(id:string) {
   }
 }
 
+export const createServiceEventKey = function(path:string, eName:string) {
+  return `${path}:${eName}`
+}
+
 /*
   remove any Vuejs-related structures
 */

@@ -34,7 +34,7 @@ import {
   createServiceConnection,
   destroyServiceConnection
 } from '@/models/service-connection'
-import { createServerStruct, createServiceStruct } from '@/utils/data-utils'
+import { createServerStruct } from '@/utils/data-utils'
 
 const FeathersGuiCtrlClass = Vue.extend({
 
@@ -134,27 +134,20 @@ const FeathersGuiCtrlClass = Vue.extend({
       Vue.delete(waitServerInit, id)
     },
 
-    // _handleServerIsConnected(event:IServerConnectionIsConnectedEvent) {
-    //   console.warn('FGUI CTRL _handleServerIsConnected')
-    // },
-
     _createServerConnection(server: ServerStruct) : IServerConnection {
-      const { IS_CONNECTED, IS_INITIALIZED } = ServerConnectionEvents
+      const { IS_INITIALIZED } = ServerConnectionEvents
       const srvrConn = createServerConnection(server)
 
-      // srvrConn.$on(IS_CONNECTED, this._handleServerIsConnected)
       srvrConn.$on(IS_INITIALIZED, this._handleServerIsInitialized)
-
       store.commit('addServerConnection', srvrConn)
       return srvrConn
     },
 
     _removeServerConnection(server: ServerStruct | IServerConnection) {
-      const { IS_CONNECTED, IS_INITIALIZED } = ServerConnectionEvents
+      const { IS_INITIALIZED } = ServerConnectionEvents
       const { id } = server
       const srvrConn = this.getServerConnectionByServerId(id)
       if (srvrConn) {
-        // srvrConn.$off(IS_CONNECTED, this._handleServerIsConnected)
         srvrConn.$off(IS_INITIALIZED, this._handleServerIsInitialized)
         destroyServerConnection(srvrConn)
         store.commit('removeServerConnectionById', { id })
@@ -305,7 +298,6 @@ const FeathersGuiCtrlClass = Vue.extend({
   watch: {
 
     activeServerConnectionsList(newVal:IServerConnection[]) {
-      // console.log('FGUI Watch activeServerConnectionsList', newVal.length)
       if (newVal.length === 0) {
         this.showManageServersDialog()
       } if (newVal.length === 1) {
@@ -314,7 +306,6 @@ const FeathersGuiCtrlClass = Vue.extend({
     },
 
     serversAreInitialized(newVal:boolean) {
-      // console.warn('FGUI Watch serversAreInitialized', newVal)
       if (newVal === true) {
         this._checkValidCurrentServerId()
       }

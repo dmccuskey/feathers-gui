@@ -140,11 +140,6 @@ export const ServiceConnectionClass = Vue.extend({
       return serverConnection.create(path, record, params)
     },
 
-    updateRecord(id:string, record:DataRecord) : Promise<any> {
-      const { params, path, serverConnection } = this
-      return serverConnection.update(path, id, record, params)
-    },
-
     readRecord(id:string) : DataRecord | null {
       const { records } = this
       const findById = createFindItemId(id)
@@ -152,9 +147,19 @@ export const ServiceConnectionClass = Vue.extend({
       return (idx === -1) ? null : cleanFeathersRecord(records[idx])
     },
 
+    updateRecord(id:string, record:DataRecord) : Promise<any> {
+      const { params, path, serverConnection } = this
+      return serverConnection.update(path, id, record, params)
+    },
+
     deleteRecord(id:string) : Promise<any> {
       const { path, serverConnection } = this
       return serverConnection.remove(path, id)
+    },
+
+    patchRecord(id:string, record:DataRecord) : Promise<any> {
+      const { params, path, serverConnection } = this
+      return serverConnection.patch(path, id, record, params)
     },
 
     removeSelectedRecords() : Promise<any> {
@@ -212,6 +217,18 @@ export const ServiceConnectionClass = Vue.extend({
       }
     },
 
+    _handleOnPatched(record:FeathersRecord) {
+      const { records } = this
+      const { _id } = record
+      const findById = createFindItemId(_id)
+      const idx = records.findIndex(findById)
+      if (idx === -1) {
+        console.warn('GUI WARN: record not found', record)
+      } else {
+        records.splice(idx, 1, record)
+      }
+    },
+
     _loadRecords() {
       const { params, serverConnection, path } = this
       const processResults = (function(self) {
@@ -227,13 +244,12 @@ export const ServiceConnectionClass = Vue.extend({
       serverConnection.find(path, params)
         .then((results:FeathersRecord) => results.data || [])
         .then(processResults)
-        .catch((err:any) => console.warn('err', err))
+        .catch((err:any) => console.warn('SRVC CONN _loadRecords', err))
     },
 
     _handleServerConnectedChange(event:IServerConnectionIsConnectedEvent) {
       const { data } = event
       const { path } = this
-      console.warn('SRVC CONN _handleServerConnectedChange', data, path)
       if (data) {
         this._doServerIsConnectedActions()
       } else {
@@ -251,7 +267,6 @@ export const ServiceConnectionClass = Vue.extend({
 
     _handleServerInitializedChange(event:IServerConnectionIsInitializedEvent) {
       const { data } = event
-      console.warn('SRVC CONN _handleServerInitializedChange', data)
       if (data) {
         this._doServerIsInitializedActions()
       } else {
@@ -286,6 +301,7 @@ export const ServiceConnectionClass = Vue.extend({
       serverConnection.onCreated(this.path, this._handleOnCreated)
       serverConnection.onRemoved(this.path, this._handleOnRemoved)
       serverConnection.onUpdated(this.path, this._handleOnUpdated)
+      serverConnection.onPatched(this.path, this._handleOnPatched)
     },
 
     _removeServerInitListeners() {
@@ -293,6 +309,7 @@ export const ServiceConnectionClass = Vue.extend({
       serverConnection.offCreated(this.path, this._handleOnCreated)
       serverConnection.offRemoved(this.path, this._handleOnRemoved)
       serverConnection.offUpdated(this.path, this._handleOnUpdated)
+      serverConnection.offPatched(this.path, this._handleOnPatched)
     },
 
     /*
@@ -334,7 +351,7 @@ export const ServiceConnectionClass = Vue.extend({
   created() {
     const { data, serverConnection } = this
 
-    console.warn(`SRVC CONN Creating service connection: ${data.path}`)
+    // console.log(`SRVC CONN Creating service connection: ${data.path}`)
 
     this.updateService(data) // save initial state
     this._setupServerBaseListeners()
@@ -346,7 +363,6 @@ export const ServiceConnectionClass = Vue.extend({
   },
 
   beforeDestroy() {
-    console.warn('SRVC CONN: beforeDestroy')
     this._removeServerInitListeners()
     this._removeServerBaseListeners()
     this._removeServiceFromStore()
