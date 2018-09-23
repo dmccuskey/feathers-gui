@@ -433,7 +433,6 @@ export const ServerConnectionClass = Vue.extend({
     _updateConnectionState() {
       const { isActive, stateMachine, socket } = this
 
-      // console.log('_updateConnectionState', isActive, socket, socket && socket.disconnected)
       if (isActive && socket) {
         // if URL has changed or we are already trying to connect
         stateMachine.restart()
@@ -600,7 +599,6 @@ export const ServerConnectionClass = Vue.extend({
 
     isConnected(newVal:boolean, oldVal:boolean) {
       const { IS_CONNECTED } = ServerConnectionEvents
-      // console.log('WATCH isConnected', newVal, oldVal)
       const event = this._createEvent<boolean>(IS_CONNECTED, newVal)
       this._emitEvent(event)
     },

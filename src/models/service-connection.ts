@@ -249,7 +249,6 @@ export const ServiceConnectionClass = Vue.extend({
 
     _handleServerConnectedChange(event:IServerConnectionIsConnectedEvent) {
       const { data } = event
-      const { path } = this
       if (data) {
         this._doServerIsConnectedActions()
       } else {
