@@ -151,6 +151,10 @@ export interface IServerConnection extends Vue {
   id: string
   url: string
   isActive: boolean
+  isConnected: boolean
+  isError: string | null
+  isInitialized: boolean
+
   serviceConnectionsList: IServiceConnection[]
 
   toggleActiveState() : void
