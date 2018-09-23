@@ -1,5 +1,5 @@
 <template>
-<el-dialog class="add-service-dialog" title="Add a New Service" :visible="true">
+<el-dialog id="add-service-dialog" title="Add a New Service" :visible="true">
   <el-form
     v-model="addServiceForm"
   >
@@ -9,14 +9,16 @@
       />
     </el-form-item>
   </el-form>
+  <div v-if="!isPathValid" class="text-error">That service path already exists !</div>
   <span slot="footer" class="dialog-footer">
     <el-button
-      @click="handleCancelDialog"
+      @click="_handleCancelDialog"
     >
       Cancel
     </el-button>
     <el-button type="primary"
-      @click="handleConfirmDialog"
+      :disabled="!isPathValid"
+      @click="_handleConfirmDialog"
     >
       Save
     </el-button>
@@ -27,6 +29,7 @@
 <script lang="ts">
 // Libs
 import Vue from 'vue'
+import { IServerConnection } from '@/interfaces'
 
 export default Vue.extend({
 
@@ -40,14 +43,33 @@ export default Vue.extend({
     }
   },
 
+  computed: {
+
+    isPathValid() : boolean {
+      const { serverConnection, path } = this
+      return (serverConnection.hasService(path) === false)
+    },
+
+    path() : string {
+      const { addServiceForm } = this
+      return addServiceForm.path
+    },
+
+    serverConnection() : IServerConnection {
+      const { serverConnection } = this.data
+      return serverConnection
+    },
+
+  },
+
   methods: {
 
-    handleCancelDialog() {
+    _handleCancelDialog() {
       const { cancel } = this
       if (cancel) cancel()
     },
 
-    handleConfirmDialog() {
+    _handleConfirmDialog() {
       const { success, addServiceForm } = this
       if (success) success({ path: addServiceForm.path })
     },
@@ -56,3 +78,13 @@ export default Vue.extend({
 
 })
 </script>
+
+<style lang="scss" scoped>
+#add-service-dialog {
+
+  .text-error {
+    color:red;
+    margin: 10px 0 5px
+  }
+}
+</style>

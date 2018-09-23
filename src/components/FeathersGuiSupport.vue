@@ -8,6 +8,7 @@
   />
   <add-service-dialog
     v-if="showAddServiceDialog"
+    :data="displayDialogData"
     :success="displayDialogSuccess"
     :cancel="displayDialogCancel"
   />

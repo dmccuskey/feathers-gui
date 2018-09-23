@@ -181,9 +181,22 @@ export const ServerConnectionClass = Vue.extend({
 
     addService(props: AddServiceProps) {
       const { path, serverId } = props
-      const srvcStruct = createServiceStruct({ path, serverId })
-      store.commit('addService', srvcStruct)
-      this._createServiceConnection(srvcStruct)
+      if (this.hasService(path)) {
+        console.warn(`SRVR CONN addService, service exists '${path}'`)
+      } else {
+        const srvcStruct = createServiceStruct({ path, serverId })
+        store.commit('addService', srvcStruct)
+        this._createServiceConnection(srvcStruct)
+      }
+    },
+
+    hasService(path:string) : boolean {
+      const { serviceConnections } = this
+      const result = Object.entries(serviceConnections).filter(function(item) {
+        const [key, service] = item
+        return service.path === path
+      })
+      return (result.length > 0)
     },
 
     removeService(service: ServiceStruct | IServiceConnection) {

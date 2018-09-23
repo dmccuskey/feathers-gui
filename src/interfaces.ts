@@ -64,6 +64,7 @@ export interface ShowDialogProps {
 }
 
 export interface ShowAddServiceDialogProps extends ShowDialogProps {
+  serverConnection: IServerConnection
 }
 export interface ShowAddServiceRecordDialogProps extends ShowDialogProps {
   record: DataRecord
@@ -160,16 +161,18 @@ export interface IServerConnection extends Vue {
   toggleActiveState() : void
   updateServer(props:ServerProps) : void
   addService(props: AddServiceProps) : void
+  hasService(path:string) : boolean
   removeService(service: ServiceStruct | IServiceConnection) : void
   setSelectedService(service: ServiceStruct | IServiceConnection) : void
 
+  // Feathers calls
   find(path:string, params?:any): Promise<any>
   create(path:string, jsonRec:any, params?:any): Promise<any>
   patch(path:string, id:string, data:any, params?:any) : Promise<any>
   remove(path:string, id:string, params?:any) : Promise<any>
   update(path:string, id:string, data:any, params?:any) : Promise<any>
 
-  // events
+  // Feathers events
   onCreated(path:string, callback:Listener) : void
   offCreated(path:string, callback:Listener) : void
   onRemoved(path:string, callback:Listener) : void

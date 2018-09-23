@@ -26,7 +26,7 @@
   <hr />
 
   <el-button type="success" plain size="small" icon="el-icon-plus"
-    @click="handleAddService"
+    @click="_handleAddService"
   >
     Add Service Path
   </el-button>
@@ -92,7 +92,7 @@ export default Vue.extend({
 
   methods: {
 
-    handleAddService() {
+    _handleAddService() {
       const { currentServerId: serverId, currentServerConnection: srvrConn } = this
       const success = (result: {path:string}) => {
         const { path } = result
@@ -105,7 +105,11 @@ export default Vue.extend({
         }
       }
 
-      FGuiCtrl.showAddServiceDialog({ success })
+      if (srvrConn) {
+        FGuiCtrl.showAddServiceDialog({ serverConnection: srvrConn, success })
+      } else {
+        console.warn('showAddServiceDialog: no server connection')
+      }
     },
 
     _handleRemoveService(service: IServiceConnection) {

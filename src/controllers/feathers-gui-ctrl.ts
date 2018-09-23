@@ -159,7 +159,7 @@ const FeathersGuiCtrlClass = Vue.extend({
     */
 
     showAddServiceDialog(props: ShowAddServiceDialogProps) {
-      const { success, cancel } = props
+      const { serverConnection, success, cancel } = props
 
       const successWrap = (result:DataRecord) => {
         store.commit('removeCurrentDialog')
@@ -174,6 +174,9 @@ const FeathersGuiCtrlClass = Vue.extend({
         type: DialogTypes.ADD_SERVICE,
         success: successWrap,
         cancel: cancelWrap,
+        data: {
+          serverConnection,
+        },
       }
       store.commit('showDialog', payload)
     },
