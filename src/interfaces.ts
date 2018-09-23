@@ -95,18 +95,11 @@ export interface ServerStruct extends ServerProps {
 export interface ServersHash {
   [key:string] : ServerStruct
 }
-
-export interface IServerConnectionData {
-  isActiveValue: boolean
-  urlValue: string
-  authentication: null
-
-  socket: SocketIOClient.Socket | null,
-  isInitialized: boolean
-  isConnected: boolean
-  saveTimerRef: NodeJS.Timer | null
-  selectedService: IServiceConnection | null
-  serviceConnections: IServiceConnectionsHash
+export interface ServiceCallbacksHash {
+  [key:string] : Listener[]
+}
+export interface LocalCallbackHash {
+  [key:string] : Listener
 }
 
 export interface IServerConnectionEvent<T> {
@@ -126,6 +119,32 @@ export interface AddServerProps {
   url: string
   isActive: boolean
   authentication: null
+}
+
+export interface StateMachineEvent {
+  transition: string
+  from: string
+  to: string
+}
+
+export interface IServerConnectionData {
+  isActiveValue: boolean
+  urlValue: string
+  authentication: null
+
+  errorCount: number
+  isError: string | null
+
+  socket: SocketIOClient.Socket | null,
+  isInitialized: boolean
+  isConnected: boolean
+  saveTimerRef: NodeJS.Timer | null
+  stateChangeTimerRef: NodeJS.Timer | null
+  selectedService: IServiceConnection | null
+  serviceConnections: IServiceConnectionsHash
+  serviceCallbacks: ServiceCallbacksHash
+  localCallbacks: LocalCallbackHash
+  stateMachine: any | null
 }
 
 export interface IServerConnection extends Vue {

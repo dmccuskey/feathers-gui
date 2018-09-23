@@ -12,7 +12,8 @@ import {
   IServiceConnectionData,
   ServiceFieldsStruct,
   ServiceProps,
-  ServiceStruct
+  ServiceStruct,
+  IServerConnectionIsConnectedEvent
 } from '@/interfaces'
 
 // Components
@@ -229,9 +230,28 @@ export const ServiceConnectionClass = Vue.extend({
         .catch((err:any) => console.warn('err', err))
     },
 
-    _handleServerIsInitialized(event:IServerConnectionIsInitializedEvent) {
-      const { data, target } = event
-      // console.warn('SRVC CONN server is ready', data)
+    _handleServerConnectedChange(event:IServerConnectionIsConnectedEvent) {
+      const { data } = event
+      const { path } = this
+      console.warn('SRVC CONN _handleServerConnectedChange', data, path)
+      if (data) {
+        this._doServerIsConnectedActions()
+      } else {
+        this._doServerNotConnectedActions()
+      }
+    },
+
+    _doServerIsConnectedActions() {
+      this._loadRecords()
+    },
+
+    _doServerNotConnectedActions() {
+      this._clearRecords()
+    },
+
+    _handleServerInitializedChange(event:IServerConnectionIsInitializedEvent) {
+      const { data } = event
+      console.warn('SRVC CONN _handleServerInitializedChange', data)
       if (data) {
         this._doServerIsInitializedActions()
       } else {
@@ -239,26 +259,26 @@ export const ServiceConnectionClass = Vue.extend({
       }
     },
 
-    _setupListeners() {
-      const { IS_INITIALIZED } = ServerConnectionEvents
-      const { serverConnection } = this
-      serverConnection.$on(IS_INITIALIZED, this._handleServerIsInitialized)
-    },
-
-    _removeListeners() {
-      const { IS_INITIALIZED } = ServerConnectionEvents
-      const { serverConnection } = this
-      serverConnection.$off(IS_INITIALIZED, this._handleServerIsInitialized)
-    },
-
     _doServerIsInitializedActions() {
-      this._loadRecords()
       this._setupServerInitListeners()
     },
 
     _doServerNotInitializedActions() {
-      this._clearRecords()
       this._removeServerInitListeners()
+    },
+
+    _setupServerBaseListeners() {
+      const { IS_CONNECTED, IS_INITIALIZED } = ServerConnectionEvents
+      const { serverConnection } = this
+      serverConnection.$on(IS_CONNECTED, this._handleServerConnectedChange)
+      serverConnection.$on(IS_INITIALIZED, this._handleServerInitializedChange)
+    },
+
+    _removeServerBaseListeners() {
+      const { IS_CONNECTED, IS_INITIALIZED } = ServerConnectionEvents
+      const { serverConnection } = this
+      serverConnection.$off(IS_CONNECTED, this._handleServerConnectedChange)
+      serverConnection.$off(IS_INITIALIZED, this._handleServerInitializedChange)
     },
 
     _setupServerInitListeners() {
@@ -317,7 +337,7 @@ export const ServiceConnectionClass = Vue.extend({
     console.warn(`SRVC CONN Creating service connection: ${data.path}`)
 
     this.updateService(data) // save initial state
-    this._setupListeners()
+    this._setupServerBaseListeners()
     if (serverConnection.isInitialized) {
       this._doServerIsInitializedActions()
     }
@@ -328,7 +348,7 @@ export const ServiceConnectionClass = Vue.extend({
   beforeDestroy() {
     console.warn('SRVC CONN: beforeDestroy')
     this._removeServerInitListeners()
-    this._removeListeners()
+    this._removeServerBaseListeners()
     this._removeServiceFromStore()
   },
 
