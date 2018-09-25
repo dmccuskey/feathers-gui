@@ -221,19 +221,13 @@ export const ServerConnectionClass = Vue.extend({
       clientHash[id] = client
     },
 
-    // Application<object> | Service<object>
-    loadClient() : any | null {
-      const { id } = this
-      return clientHash[id] || null
-    },
-
     removeClient() : any | null {
       const { id } = this
       clientHash[id] = null
     },
 
     service(location:string) : Service<any> {
-      const client = this._getApplication()
+      const client = this._getClient()
       if (client === null) {
         throw new Error('no client. check client status before making calls.')
       }
@@ -337,7 +331,7 @@ export const ServerConnectionClass = Vue.extend({
         const callback = this._createLocalEventListener(key)
         localCallbacks[key] = callback
 
-        const client = this.loadClient()
+        const client = this._getClient()
         if (client) {
           // already have a client, so add new callback now
           this._attachLocalListener(key, callback)
@@ -396,20 +390,9 @@ export const ServerConnectionClass = Vue.extend({
       private support
     */
 
-    _getApplication() : Application<object> {
-      const client = this.loadClient()
-      if (client === null) {
-        throw new Error('SRVR CONN no client in _getApplication()')
-      }
-      return client
-    },
-
-    _getService() : Service<object> {
-      const client = this.loadClient()
-      if (client === null) {
-        throw new Error('SRVR CONN no client in _getService()')
-      }
-      return client as Service<object>
+    _getClient() : Application<object> & Service<object> | null {
+      const { id } = this
+      return clientHash[id] || null
     },
 
     /*
@@ -538,9 +521,11 @@ export const ServerConnectionClass = Vue.extend({
         this.socket = null
 
         // teardown client
-        const client = this._getApplication()
-        client.removeAllListeners()
-        this.removeClient()
+        const client = this._getClient()
+        if (client) {
+          client.removeAllListeners()
+          this.removeClient()
+        }
       }
     },
 
