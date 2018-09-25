@@ -1,5 +1,5 @@
 <template>
-<el-row :span="24" :gutter="0">
+<el-row :span="24" :gutter="20">
   <el-col :span="6">
     <side-bar
       :serverConnection="currentServerConnection"
