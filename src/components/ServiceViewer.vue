@@ -3,7 +3,7 @@
   <div class="section-title">Service Viewer</div>
 
   <div style="padding-top:10px"
-    v-if="!hasSelectedService"
+    v-if="!_hasSelectedService"
   >
     No Service Selected
   </div>
@@ -50,7 +50,7 @@ export default Vue.extend({
       return (serverConnection) ? serverConnection.selectedService : null
     },
 
-    hasSelectedService() {
+    _hasSelectedService() {
       return (this.selectedService !== null)
     },
 
