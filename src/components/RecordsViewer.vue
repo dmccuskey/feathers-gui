@@ -42,9 +42,12 @@
       :prop="field.property"
       :key="field.property"
       :label="field.property"
-      :formatter="formatFieldData"
       resizable
-    />
+    >
+      <template slot-scope="scope">
+        <div v-html="formatFieldData(scope.row, scope.column)"></div>
+      </template>
+    </el-table-column>
   </el-table>
   </template>
 </div>
@@ -128,7 +131,7 @@ export default Vue.extend({
       const type = lookup[ label ]
 
       let data = record[ label ] // eg, '3425325'
-      data = (data === undefined) ? '<undefined>' : data
+      data = (data === undefined) ? '<span class="no-data">&lt;undefined&gt;</span>' : data
 
       let result
       // TODO: put in data formatters
@@ -139,7 +142,7 @@ export default Vue.extend({
           break
         case 'string':
           result = data.toString()
-          result = (result === '') ? '<empty>' : result
+          result = (result === '') ? '<span class="no-data">&lt;empty&gt;</span>' : result
           break
         case 'array':
         case 'boolean':
