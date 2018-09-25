@@ -1,5 +1,5 @@
 <template>
-<div>
+<div id="records-viewer">
   <div
     v-if="serviceId === null"
   >
@@ -171,3 +171,12 @@ export default Vue.extend({
 
 })
 </script>
+
+<style lang="scss">
+#records-viewer {
+  .no-data {
+    color: #aaa;
+    font-style: italic;
+  }
+}
+</style>
