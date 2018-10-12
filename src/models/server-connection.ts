@@ -495,7 +495,7 @@ export const ServerConnectionClass = Vue.extend({
 
     _doStateConnect() {
       const { url } = this
-      console.warn(`Attempting connection to ${url}`)
+      console.info(`Attempting connection to ${url}`)
       const client = feathers()
       this.socket = createSocket({ url })
 
@@ -681,7 +681,7 @@ export const ServerConnectionClass = Vue.extend({
           this._doStateConnect()
         },
         onEnterConnected: () => {
-          console.warn('Socket is Connected')
+          console.info('Socket is Connected')
           const { stateMachine } = this
           this.isConnected = true
 
@@ -693,7 +693,7 @@ export const ServerConnectionClass = Vue.extend({
           Vue.nextTick(() => this._doStateDisconnect())
         },
         onEnterDisconnected: () => {
-          console.warn('Socket is Disconnected')
+          console.info('Socket is Disconnected')
           const { stateMachine } = this
           this.isConnected = false
 
@@ -707,7 +707,7 @@ export const ServerConnectionClass = Vue.extend({
           set restart flag before doing
         */
         onBeforeRestart: () => {
-          console.warn('Socket is Restarting')
+          console.info('Socket is Restarting')
           const { stateMachine } = this
           stateMachine.setRestartFlag()
         },
