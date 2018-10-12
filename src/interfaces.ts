@@ -4,7 +4,6 @@
 
 // Libs
 import Vue from 'vue'
-import { Service } from '@feathersjs/feathers'
 
 // Interface
 
