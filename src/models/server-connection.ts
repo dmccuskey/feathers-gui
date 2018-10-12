@@ -9,6 +9,7 @@ import Vue from 'vue'
 import io from 'socket.io-client'
 import feathers, { Application, Service } from '@feathersjs/feathers'
 import socketio from '@feathersjs/socketio-client'
+import Debug from 'debug'
 
 // Components
 import store from '@/store'
@@ -105,6 +106,7 @@ export const ServerConnectionClass = Vue.extend({
           '/charts:created': func
         */
       },
+      debug: null,
     }
   },
 
@@ -623,6 +625,8 @@ export const ServerConnectionClass = Vue.extend({
   },
 
   created() {
+    this.debug = Debug(`fgui:server-connection`)
+
     this.stateMachine = new StateMachine({
 
       init: 'created',
@@ -659,7 +663,8 @@ export const ServerConnectionClass = Vue.extend({
 
         /* e:StateMachineEvent */
         onEnterCreated: () => {
-          console.info(`SRVR CONN Created: ${this.data.url}`)
+          const { debug } = this
+          debug(`created: ${this.data.url}`)
         },
         onEnterInitialized: () => {
           this._doStateInitialize()

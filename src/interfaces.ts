@@ -146,6 +146,7 @@ export interface IServerConnectionData {
   serviceCallbacks: ServiceCallbacksHash
   localCallbacks: LocalCallbackHash
   stateMachine: any | null
+  debug: debug.IDebugger | null
 }
 
 export interface IServerConnection extends Vue {

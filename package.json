@@ -10,6 +10,7 @@
   "dependencies": {
     "@feathersjs/feathers": "^3.2.1",
     "@feathersjs/socketio-client": "^1.1.2",
+    "debug": "^4.1.0",
     "element-ui": "^2.4.6",
     "javascript-state-machine": "^3.1.0",
     "socket.io-client": "^2.1.1",
@@ -19,6 +20,7 @@
     "vuex-persistedstate": "^2.5.4"
   },
   "devDependencies": {
+    "@types/debug": "^0.0.31",
     "@types/feathersjs__feathers": "^3.0.4",
     "@types/feathersjs__socketio-client": "^1.0.1",
     "@types/socket.io-client": "^1.4.32",
