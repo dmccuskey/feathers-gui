@@ -1,8 +1,9 @@
 <template>
 <div id="side-bar">
-  <div class="section-title">Services</div>
 
-  <table style="width:100%;padding-top:10px">
+  <div>Services</div>
+
+  <table class="service-table">
     <col width="*">
     <col width="60">
     <tr
@@ -53,7 +54,10 @@
 import Vue from 'vue'
 
 // Constants / Interfaces
-import { ServiceStruct, IServiceConnection, ServerStruct, IServerConnection } from '@/interfaces'
+import {
+  IServerConnection,
+  IServiceConnection
+} from '@/interfaces'
 
 // Utils
 import FGuiCtrl from '@/controllers/feathers-gui-ctrl'
@@ -69,19 +73,6 @@ export default Vue.extend({
     currentServerId() : string {
       return this.$store.getters['currentServerId']
     },
-
-    currentServerData() : ServerStruct {
-      const { currentServerId } = this
-      const serverFunc = this.$store.getters['getServerByServerId']
-      return serverFunc(currentServerId)
-    },
-
-    // services() : IServiceConnection[] {
-    //   const objs: IServiceConnection[] = this.$store.getters['getServiceConnectionsList']
-    //   return objs.sort(function(a, b) {
-    //     return (a.path < b.path) ? -1 : 1
-    //   })
-    // },
 
     currentServerConnection() : IServerConnection | null {
       const { currentServerId } = this
@@ -148,6 +139,11 @@ export default Vue.extend({
     width: 100%;
     text-align: left;
     font-family: courier
+  }
+
+  .service-table {
+    width: 100%;
+    padding-top: 10px;
   }
 }
 </style>
