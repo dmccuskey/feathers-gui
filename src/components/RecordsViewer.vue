@@ -73,6 +73,8 @@ import {
   ServiceFieldsStruct
 } from '@/interfaces'
 
+const showQuotes = true
+
 export default Vue.extend({
 
   props: ['serviceConnection', 'serviceId'],
@@ -128,23 +130,34 @@ export default Vue.extend({
     formatFieldData(record: any, column:{ label:string }) {
       const { propertyTypeLookup: lookup } = this
       const { label } = column // eg, 'account_id'
-      const type = lookup[ label ]
+      let type = lookup[ label ]
 
       let data = record[ label ] // eg, '3425325'
-      data = (data === undefined) ? '<span class="no-data">&lt;undefined&gt;</span>' : data
+      if (data === undefined) {
+        data = '<span class="no-data">&lt;undefined&gt;</span>'
+        type = 'undefined'
+      }
 
       let result
-      // TODO: put in data formatters
-
       switch (type) {
+        case 'undefined':
+          result = data
+          break
         case 'number':
           result = data
           break
         case 'string':
           result = data.toString()
-          result = (result === '') ? '<span class="no-data">&lt;empty&gt;</span>' : result
+          if (showQuotes) {
+            result = `"${result}"`
+          } else {
+            result = (result === '') ? '<span class="no-data">&lt;empty&gt;</span>' : result
+          }
           break
         case 'array':
+          result = data.toString()
+          result = `[ ${result} ]`
+          break
         case 'boolean':
         case 'date':
         case 'object':
