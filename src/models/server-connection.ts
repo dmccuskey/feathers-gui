@@ -94,14 +94,14 @@ export const ServerConnectionClass = Vue.extend({
       stateMachine: null,
       serviceCallbacks: {
         /*
-          key'd on path and event
+          key'd on path and event, eg:
           '/charts:removed': [ func, func, ...],
           '/charts:created': [ func, func, ... ]
         */
       },
       localCallbacks: {
         /*
-          key'd on path and event
+          key'd on path and event, eg:
           '/charts:removed': func,
           '/charts:created': func
         */
