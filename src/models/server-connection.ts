@@ -184,7 +184,7 @@ export const ServerConnectionClass = Vue.extend({
     addService(props: AddServiceProps) {
       const { path, serverId } = props
       if (this.hasService(path)) {
-        console.warn(`SRVR CONN addService, service exists '${path}'`)
+        console.warn(`FGUI:SRVR CONN addService, service exists '${path}'`)
       } else {
         const srvcStruct = createServiceStruct({ path, serverId })
         store.commit('addService', srvcStruct)
@@ -318,7 +318,7 @@ export const ServerConnectionClass = Vue.extend({
         return (func === callback)
       })
       if (idx === -1) {
-        console.warn('GUI WARN: callback not found')
+        console.warn('FGUI: callback not found')
       } else {
         list.splice(idx, 1)
       }
