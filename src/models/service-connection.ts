@@ -214,7 +214,7 @@ export const ServiceConnectionClass = Vue.extend({
       const findById = createFindItemId(_id)
       const idx = records.findIndex(findById)
       if (idx === -1) {
-        console.warn('GUI WARN: record not found', record)
+        console.warn('FGUI WARN: record not found', record)
       } else {
         records.splice(idx, 1)
       }
@@ -226,7 +226,7 @@ export const ServiceConnectionClass = Vue.extend({
       const findById = createFindItemId(_id)
       const idx = records.findIndex(findById)
       if (idx === -1) {
-        console.warn('GUI WARN: record not found', record)
+        console.warn('FGUI WARN: record not found', record)
       } else {
         records.splice(idx, 1, record)
       }
@@ -248,7 +248,7 @@ export const ServiceConnectionClass = Vue.extend({
         .then((results:FeathersRecord) => results.data || [])
         .then(processResults)
         .catch((fError:FeathersError) => {
-          console.warn('SRVC CONN _loadRecords', fError)
+          console.warn('FGUI:SRVC CONN _loadRecords', fError)
           const { name, message, code } = fError
           const err: IServiceConnectionErrorStruct = {
             code,
