@@ -1,0 +1,38 @@
+{
+  "name": "feathers-gui",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "serve": "vue-cli-service serve",
+    "build": "vue-cli-service build",
+    "lint": "vue-cli-service lint"
+  },
+  "dependencies": {
+    "@feathersjs/feathers": "^3.2.1",
+    "@feathersjs/socketio-client": "^1.1.2",
+    "debug": "^4.1.0",
+    "element-ui": "^2.4.6",
+    "javascript-state-machine": "^3.1.0",
+    "socket.io-client": "^2.1.1",
+    "vue": "^2.5.17",
+    "vue-router": "^3.0.1",
+    "vuex": "^3.0.1",
+    "vuex-persistedstate": "^2.5.4"
+  },
+  "devDependencies": {
+    "@types/debug": "^0.0.31",
+    "@types/feathersjs__feathers": "^3.0.4",
+    "@types/feathersjs__socketio-client": "^1.0.1",
+    "@types/socket.io-client": "^1.4.32",
+    "@vue/cli-plugin-babel": "^3.0.1",
+    "@vue/cli-plugin-eslint": "^3.0.1",
+    "@vue/cli-plugin-typescript": "^3.0.1",
+    "@vue/cli-service": "^3.0.1",
+    "@vue/eslint-config-standard": "^3.0.1",
+    "@vue/eslint-config-typescript": "^3.0.1",
+    "node-sass": "^4.9.0",
+    "sass-loader": "^7.0.1",
+    "typescript": "^3.0.0",
+    "vue-template-compiler": "^2.5.17"
+  }
+}
