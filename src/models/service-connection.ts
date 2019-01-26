@@ -308,19 +308,21 @@ export const ServiceConnectionClass = Vue.extend({
     },
 
     _setupServerInitListeners() {
-      const { serverConnection } = this
-      serverConnection.onCreated(this.path, this._handleOnCreated)
-      serverConnection.onRemoved(this.path, this._handleOnRemoved)
-      serverConnection.onUpdated(this.path, this._handleOnUpdated)
-      serverConnection.onPatched(this.path, this._handleOnPatched)
+      const { path, serverConnection } = this
+
+      serverConnection.onCreated(path, this._handleOnCreated)
+      serverConnection.onRemoved(path, this._handleOnRemoved)
+      serverConnection.onUpdated(path, this._handleOnUpdated)
+      serverConnection.onPatched(path, this._handleOnPatched)
     },
 
     _removeServerInitListeners() {
-      const { serverConnection } = this
-      serverConnection.offCreated(this.path, this._handleOnCreated)
-      serverConnection.offRemoved(this.path, this._handleOnRemoved)
-      serverConnection.offUpdated(this.path, this._handleOnUpdated)
-      serverConnection.offPatched(this.path, this._handleOnPatched)
+      const { path, serverConnection } = this
+
+      serverConnection.offCreated(path, this._handleOnCreated)
+      serverConnection.offRemoved(path, this._handleOnRemoved)
+      serverConnection.offUpdated(path, this._handleOnUpdated)
+      serverConnection.offPatched(path, this._handleOnPatched)
     },
 
     /*
