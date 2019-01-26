@@ -101,7 +101,14 @@ const getSortFunc = (label: string, lookup: PropertyLookupHash) => {
 
 export default Vue.extend({
 
-  props: ['serviceConnection', 'serviceId'],
+  props: {
+    serviceId: {
+      type: String as () => string,
+    },
+    serviceConnection: {
+      type: Object as () => IServiceConnection,
+    },
+  },
 
   data() {
     return {
