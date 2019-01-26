@@ -234,6 +234,7 @@ export const ServiceConnectionClass = Vue.extend({
 
     _loadRecords() {
       const { params, serverConnection, path } = this
+
       const processResults = (function(self) {
         return function(records:any[]) {
           records.forEach(function(record) {
@@ -296,6 +297,7 @@ export const ServiceConnectionClass = Vue.extend({
     _setupServerBaseListeners() {
       const { IS_CONNECTED, IS_INITIALIZED } = ServerConnectionEvents
       const { serverConnection } = this
+
       serverConnection.$on(IS_CONNECTED, this._handleServerConnectedChange)
       serverConnection.$on(IS_INITIALIZED, this._handleServerInitializedChange)
     },
@@ -303,6 +305,7 @@ export const ServiceConnectionClass = Vue.extend({
     _removeServerBaseListeners() {
       const { IS_CONNECTED, IS_INITIALIZED } = ServerConnectionEvents
       const { serverConnection } = this
+
       serverConnection.$off(IS_CONNECTED, this._handleServerConnectedChange)
       serverConnection.$off(IS_INITIALIZED, this._handleServerInitializedChange)
     },
