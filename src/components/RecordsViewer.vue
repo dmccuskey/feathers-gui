@@ -35,6 +35,7 @@
     :height="height"
     @row-click="_handleRowClick"
     @selection-change="_handleSelectionChange"
+    @header-click="_handleHeaderClick"
   >
     <el-table-column type="selection" width="50" />
     <el-table-column
@@ -75,6 +76,29 @@ import {
 
 const showQuotes = true
 
+const getSortFunc = (label: string, lookup: PropertyLookupHash) => {
+  let type = lookup[ label ]
+
+  let func
+  switch (type) {
+    case 'number':
+    case 'date':
+      func = (a: any, b: any) => {
+        return a[label] - b[label]
+      }
+      break
+    case 'string':
+    default:
+      func = (a: any, b: any) => {
+        if (a[label] > b[label]) return 1
+        if (a[label] < b[label]) return -1
+        return 0
+      }
+      break
+  }
+  return func
+}
+
 export default Vue.extend({
 
   props: ['serviceConnection', 'serviceId'],
@@ -82,6 +106,8 @@ export default Vue.extend({
   data() {
     return {
       height: 460,
+      sortField: '_id',
+      sortReverse: false,
     }
   },
 
@@ -103,8 +129,16 @@ export default Vue.extend({
     },
 
     records() : FeathersRecord[] {
-      const { serviceConnection } = this
-      return serviceConnection.records
+      const { propertyTypeLookup, serviceConnection, sortField, sortReverse } = this
+      const { records } = serviceConnection
+
+      const sortFunc = getSortFunc(sortField, propertyTypeLookup)
+      records.sort(sortFunc)
+      if (sortReverse) {
+        records.reverse()
+      }
+
+      return records
     },
 
     haveRecords() : boolean {
@@ -115,6 +149,13 @@ export default Vue.extend({
   },
 
   methods: {
+
+    _handleHeaderClick(column: any) {
+      const { sortField, sortReverse } = this
+      const { label } = column
+      this.sortReverse = (sortField === label) ? !sortReverse : false
+      this.sortField = label
+    },
 
     _handleRowClick(record:FeathersRecord) {
       const { serviceConnection } = this
