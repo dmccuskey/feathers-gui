@@ -158,8 +158,11 @@ export default Vue.extend({
           result = data.toString()
           result = `[ ${result} ]`
           break
-        case 'boolean':
         case 'date':
+          let d = new Date(data)
+          result = d.toISOString()
+          break
+        case 'boolean':
         case 'object':
         case 'relation':
         default:
