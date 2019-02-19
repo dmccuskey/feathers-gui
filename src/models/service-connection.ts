@@ -200,7 +200,9 @@ export const ServiceConnectionClass = Vue.extend({
       const findById = createFindItemId(_id)
       const idx = records.findIndex(findById)
       if (idx === -1) {
-        console.warn('GUI WARN: record not found', record)
+        const wMsg = `FGUI WARN _handleOnUpdated(): record not found '${_id}'`
+        console.warn(wMsg, record)
+        this._handleOnCreated(record)
       } else {
         records.splice(idx, 1, record)
         this.updateRepresentativeRecord(record)
@@ -214,7 +216,8 @@ export const ServiceConnectionClass = Vue.extend({
       const findById = createFindItemId(_id)
       const idx = records.findIndex(findById)
       if (idx === -1) {
-        console.warn('FGUI WARN: record not found', record)
+        const wMsg = `FGUI WARN _handleOnRemoved(): record not found '${_id}'`
+        console.warn(wMsg, record)
       } else {
         records.splice(idx, 1)
       }
@@ -226,7 +229,9 @@ export const ServiceConnectionClass = Vue.extend({
       const findById = createFindItemId(_id)
       const idx = records.findIndex(findById)
       if (idx === -1) {
-        console.warn('FGUI WARN: record not found', record)
+        const wMsg = `FGUI WARN _handleOnPatched(): record not found '${_id}'`
+        console.warn(wMsg, record)
+        this._handleOnCreated(record)
       } else {
         records.splice(idx, 1, record)
       }
