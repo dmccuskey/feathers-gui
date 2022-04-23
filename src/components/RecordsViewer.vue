@@ -112,7 +112,7 @@ export default Vue.extend({
 
   data() {
     return {
-      height: 460,
+      height: 800,
       sortField: '_id',
       sortReverse: false,
     }
