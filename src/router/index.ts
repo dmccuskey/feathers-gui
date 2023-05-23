@@ -1,15 +1,15 @@
 // Libs
 import Vue from 'vue'
-import Router from 'vue-router'
+import VueRouter, { RouteConfig } from 'vue-router'
 
 // Components & Views
-import About from './views/About.vue'
-import Browser from './views/Browser.vue'
-import Home from './views/Home.vue'
+import About from '@/views/About.vue'
+import Browser from '@/views/Browser.vue'
+import Home from '@/views/Home.vue'
 
-Vue.use(Router)
+Vue.use(VueRouter)
 
-export const routes = [
+export const routes: Array<RouteConfig> = [
   {
     path: '/',
     name: 'home',
@@ -27,7 +27,7 @@ export const routes = [
   },
 ]
 
-export const router = new Router({
+export const router = new VueRouter({
   routes,
   mode: 'hash',
 })

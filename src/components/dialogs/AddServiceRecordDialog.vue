@@ -1,42 +1,72 @@
 <template>
-<el-dialog title="Type in your record" :visible="true">
+  <el-dialog title="Type in your record" :visible="true">
+    <el-input
+      type="textarea"
+      placeholder="input"
+      :rows="10"
+      v-model="textAreaStr"
+      :style="textAreaStyles"
+    />
 
-  <el-input type="textarea" placeholder="input" :rows="10"
-    v-model="textAreaStr"
-    :style="textAreaStyles"
-  />
+    <div v-if="!isValid" class="text-error">Invalid JSON !</div>
 
-  <div v-if="!isValid" class="text-error">Invalid JSON !</div>
-
-  <span slot="footer" class="dialog-footer">
-    <el-button
-      @click="handleCancelDialog"
-    >
-      Cancel
-    </el-button>
-    <el-button type="primary"
-      @click="handleConfirmDialog"
-      :disabled="!isValid"
-    >
-      Create
-    </el-button>
-  </span>
-</el-dialog>
+    <span slot="footer" class="dialog-footer">
+      <el-button @click="_handleCancelDialog"> Cancel </el-button>
+      <el-button
+        type="primary"
+        @click="_handleConfirmDialog"
+        :disabled="!isValid"
+      >
+        Create
+      </el-button>
+    </span>
+  </el-dialog>
 </template>
 
 <script lang="ts">
 // Libs
 import Vue from 'vue'
+import { Deferred } from 'ts-deferred'
 
-// Constants / Interfaces
-import { DataRecord } from '@/interfaces'
+// Constants & Interfaces
+import { DataRecord } from '@/services/feathers-server.interfaces'
+import { ShowDialogProps } from '@/controllers/app-ctrl.interfaces'
+import { AddServiceRecordDialogProps } from '@/controllers/dialog.interfaces'
+import { Events } from '@/controllers/dialog.constants'
 
 // Utils
 import { pJsonStr, validateJsonStr } from '@/utils/data-utils'
 
-export default Vue.extend({
+/*
+  Vuejs Interfaces
+*/
+interface IProps {
+  data: ShowDialogProps
+}
 
-  props: ['data', 'cancel', 'success'],
+interface IData {
+  textAreaStr: string
+}
+
+interface IComputed {
+  props: AddServiceRecordDialogProps
+  deferred: Deferred<string>
+  isValid: boolean
+  textAreaStyles: DataRecord
+}
+
+interface IMethods {
+  _handleCancelDialog(): void
+  _handleConfirmDialog(): void
+}
+
+export default Vue.extend<IData, IMethods, IComputed, IProps>({
+  props: {
+    data: {
+      type: Object as () => ShowDialogProps,
+      required: true,
+    },
+  },
 
   data() {
     return {
@@ -45,13 +75,22 @@ export default Vue.extend({
   },
 
   computed: {
+    props() {
+      const { data } = this
+      return data.props as AddServiceRecordDialogProps
+    },
 
-    isValid() : boolean {
+    deferred() {
+      const { data } = this
+      return data.deferred
+    },
+
+    isValid() {
       const { textAreaStr } = this
       return validateJsonStr(textAreaStr)
     },
 
-    textAreaStyles() : DataRecord {
+    textAreaStyles() {
       const { isValid } = this
       let styles: DataRecord = {}
       if (!isValid) {
@@ -59,28 +98,24 @@ export default Vue.extend({
       }
       return styles
     },
-
   },
 
   methods: {
-
-    handleCancelDialog() {
-      const { cancel } = this
-      if (cancel) cancel()
+    _handleCancelDialog() {
+      this.deferred.reject(Events.CANCELLED)
     },
 
-    handleConfirmDialog() {
-      const { success, textAreaStr } = this
-      if (success) success(textAreaStr)
+    _handleConfirmDialog() {
+      const { deferred, textAreaStr } = this
+      deferred.resolve(textAreaStr)
     },
-
   },
 
   created() {
-    const { data } = this
-    const record = data || {}
-    this.textAreaStr = pJsonStr(record)
-  },
+    const { recordTmpl } = this.props
 
+    // save incoming template
+    this.textAreaStr = pJsonStr(recordTmpl)
+  },
 })
 </script>

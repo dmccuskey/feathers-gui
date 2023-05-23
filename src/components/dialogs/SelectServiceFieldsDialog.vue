@@ -1,63 +1,50 @@
 <template>
-<el-dialog title="Select Fields to Display" :visible="true">
+  <el-dialog title="Select Fields to Display" :visible="true">
+    <el-form v-model="dialogForm">
+      <div style="text-align: center">
+        <table style="width: 75%">
+          <col width="50" />
+          <col width="*" />
+          <col width="*" />
 
-  <el-form
-    v-model="dialogForm"
-  >
-    <div style="text-align:center;">
-    <table style="width:75%">
-      <col width="50">
-      <col width="*">
-      <col width="*">
+          <tr>
+            <th>&nbsp;</th>
+            <th>Field Name</th>
+            <th>Type</th>
+          </tr>
 
-      <tr>
-        <th>&nbsp;</th>
-        <th>Field Name</th>
-        <th>Type</th>
-      </tr>
+          <tr v-for="fieldname in recordKeys" :key="fieldname">
+            <td>
+              <i v-if="dialogForm[fieldname] == ''" class="el-icon-minus" />
+              <i v-else class="el-icon-circle-check" />
+            </td>
 
-      <tr
-        v-for="fieldname in recordKeys"
-        :key="fieldname"
-      >
-        <td>
-          <i v-if="dialogForm[fieldname]==''" class="el-icon-minus" />
-          <i v-else class="el-icon-circle-check" />
-        </td>
+            <td>{{ fieldname }}</td>
 
-        <td>{{fieldname}}</td>
+            <td>
+              <el-select
+                placeholder="Select a type"
+                v-model="dialogForm[fieldname]"
+              >
+                <el-option label="Not Selected" value="" />
+                <el-option
+                  v-for="item in propertyTypes"
+                  :key="item.value"
+                  :label="item.label"
+                  :value="item.value"
+                />
+              </el-select>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </el-form>
 
-        <td>
-          <el-select placeholder="Select a type"
-            v-model="dialogForm[fieldname]"
-          >
-          <el-option label="Not Selected" value="" />
-          <el-option
-            v-for="item in propertyTypes"
-            :key="item.value"
-            :label="item.label"
-            :value="item.value"
-          />
-          </el-select>
-        </td>
-      </tr>
-    </table>
-    </div>
-  </el-form>
-
-  <span slot="footer" class="dialog-footer">
-    <el-button
-      @click="handleCancelDialog"
-    >
-      Cancel
-    </el-button>
-    <el-button type="primary"
-      @click="handleConfirmDialog"
-    >
-      Save
-    </el-button>
-  </span>
-</el-dialog>
+    <span slot="footer" class="dialog-footer">
+      <el-button @click="_handleCancelDialog"> Cancel </el-button>
+      <el-button type="primary" @click="_handleConfirmDialog"> Save </el-button>
+    </span>
+  </el-dialog>
 </template>
 
 <script lang="ts">
@@ -75,18 +62,62 @@
 */
 // Libs
 import Vue from 'vue'
+import { Deferred } from 'ts-deferred'
 
 // Constants / Interfaces
-import { PropertyTypes } from '@/app-constants'
-import { IServiceConnection, DataRecord } from '@/interfaces'
+import { DataRecord } from '@/services/feathers-server.interfaces'
+import { SelectServiceFieldsDialogProps } from '@/controllers/dialog.interfaces'
+import { ShowDialogProps } from '@/controllers/app-ctrl.interfaces'
+import {
+  IService,
+  PropertyLookupHash,
+  ServiceField,
+} from '@/models/service.interfaces'
+import { Events, PropertyTypes } from '@/controllers/dialog.constants'
 
-// Components
-import FGuiCtrl from '@/controllers/feathers-gui-ctrl'
+// Utils
 import { sanitizeRecordFields } from '@/utils/data-utils'
 
-export default Vue.extend({
+interface PropertyTypeItem {
+  label: string
+  value: string
+}
 
-  props: ['data', 'cancel', 'success'],
+/*
+  Vuejs Interfaces
+*/
+interface IProps {
+  data: ShowDialogProps
+}
+
+interface IData {
+  dialogForm: DataRecord
+  propertyTypes: PropertyTypeItem[]
+}
+
+interface IComputed {
+  props: SelectServiceFieldsDialogProps
+  deferred: Deferred<PropertyLookupHash>
+  recordTmpl: DataRecord
+  serviceInstance: IService
+  cleanedServiceFields: DataRecord
+  recordKeys: string[]
+  serviceFields: ServiceField[]
+}
+
+interface IMethods {
+  _handleCancelDialog(): void
+  _handleConfirmDialog(): void
+  _updateDialogForm(): void
+}
+
+export default Vue.extend<IData, IMethods, IComputed, IProps>({
+  props: {
+    data: {
+      type: Object as () => ShowDialogProps,
+      required: true,
+    },
+  },
 
   data() {
     return {
@@ -96,9 +127,33 @@ export default Vue.extend({
   },
 
   computed: {
+    props() {
+      const { data } = this
+      return data.props as SelectServiceFieldsDialogProps
+    },
 
-    recordKeys() : string[] {
+    deferred() {
+      const { data } = this
+      return data.deferred
+    },
+
+    recordTmpl(): DataRecord {
+      const { props } = this
+      return props.recordTmpl
+    },
+
+    serviceInstance() {
+      const { props } = this
+      return props.serviceInstance
+    },
+
+    recordKeys() {
       return Object.keys(this.dialogForm)
+    },
+
+    serviceFields() {
+      const { serviceInstance } = this
+      return serviceInstance.fields
     },
 
     /*
@@ -106,79 +161,57 @@ export default Vue.extend({
       unpack structure into key/value format
     */
     cleanedServiceFields() {
-      const { serviceConnection } = this
-      let fields = serviceConnection.fields
-      const clean:DataRecord = {}
-      fields.forEach(function(field) {
+      const { serviceFields } = this
+
+      const cleanFields: DataRecord = {}
+      serviceFields.forEach(function (field) {
         const { property, type } = field
-        clean[property] = type || ''
+        cleanFields[property] = type || ''
       })
-      return clean
+      return cleanFields
     },
-
-    dataRecord() : DataRecord {
-      const { record } = this.data
-      return record
-    },
-
-    serviceId() : string {
-      return this.data.serviceId
-    },
-
-    serviceConnection() : IServiceConnection {
-      const { serviceConnection } = this.data
-      return serviceConnection as IServiceConnection
-    },
-
   },
 
   methods: {
-
-    handleCancelDialog() {
-      const { cancel } = this
-      if (cancel) cancel()
+    _handleCancelDialog() {
+      this.deferred.reject(Events.CANCELLED)
     },
 
     /*
       take results of Dialog Form and filter out ""
     */
-    handleConfirmDialog() {
-      const { success } = this
+    _handleConfirmDialog() {
+      const { deferred, dialogForm } = this
 
-      const dialogForm:DataRecord = this.dialogForm
-      const fields:DataRecord = {}
+      const newFields: PropertyLookupHash = {}
       for (let prop in dialogForm) {
         const value = dialogForm[prop]
-        if (value!=='') {
-          fields[ prop ] = value
+        if (value !== '') {
+          newFields[prop] = value
         }
       }
-      if (success) success(fields)
+      deferred.resolve(newFields)
     },
 
     /*
       create dynamic structure for the Dialog Form
       merge two JSON structures
     */
-    updateDialogForm() {
-      const { dataRecord, cleanedServiceFields } = this
-      const sanitizedFields = sanitizeRecordFields(dataRecord)
+    _updateDialogForm() {
+      const { recordTmpl, cleanedServiceFields } = this
+      const sanitizedFields = sanitizeRecordFields(recordTmpl)
       this.dialogForm = Object.assign(sanitizedFields, cleanedServiceFields)
     },
-
   },
 
   watch: {
-
-    dataRecord(record) {
-      this.updateDialogForm()
+    dataRecord() {
+      this._updateDialogForm()
     },
-
   },
 
   created() {
-    this.updateDialogForm()
+    this._updateDialogForm()
   },
-
 })
 </script>

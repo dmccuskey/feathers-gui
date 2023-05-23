@@ -1,49 +1,56 @@
 <template>
-<div id="record-inspector">
-  <div class="section-title">Record Inspector</div>
+  <div id="record-inspector">
+    <div class="section-title">Record Inspector</div>
 
-  <div v-if="recordId === null">no service selected</div>
+    <div v-if="recordId === null">no service selected</div>
 
-  <div v-else-if="noRecordAvail">No Record to Display</div>
+    <div v-else-if="noRecordAvail">No Record to Display</div>
 
-  <template v-else>
-  <div style="text-align:center;">
-    <div style="padding:15px 0 10px 0">Rec ID: <span class="selected-path">{{ recordId }}</span></div>
+    <template v-else>
+      <div style="text-align: center">
+        <div style="padding: 15px 0 10px 0">
+          Rec ID: <span class="selected-path">{{ recordId }}</span>
+        </div>
 
-    <el-input type="textarea" placeholder="input" :rows="12"
-      :style="textAreaStyles"
-      v-model="textAreaStr"
-    />
+        <el-input
+          type="textarea"
+          placeholder="input"
+          :rows="12"
+          :style="textAreaStyles"
+          v-model="textAreaStr"
+        />
 
-    <div class="text-error"
-      v-if="!isValid"
-    >
-      Invalid JSON !
-    </div>
+        <div class="text-error" v-if="!isValid">Invalid JSON !</div>
 
-    <el-checkbox style="margin-top:10px;"
-      v-model="showPrettyPrint"
-    >
-      Pretty Print
-    </el-checkbox>
+        <el-checkbox style="margin-top: 10px" v-model="showPrettyPrint">
+          Pretty Print
+        </el-checkbox>
 
-    <hr />
+        <hr />
 
-    <el-button  type="primary" size="small" icon="el-icon-upload" style="width:200px;"
-      @click="handleUpdateRecord"
-      :disabled="!isValid || !isModified"
-    >
-      Update
-    </el-button>
-    <el-button type="primary" size="small" icon="el-icon-upload" style="width:200px;"
-      @click="handleResetInspector"
-      :disabled="!isModified"
-    >
-      Reset
-    </el-button>
+        <el-button
+          type="primary"
+          size="small"
+          icon="el-icon-upload"
+          style="width: 200px"
+          @click="_handleUpdateRecord"
+          :disabled="!isValid || !isModified"
+        >
+          Update
+        </el-button>
+        <el-button
+          type="primary"
+          size="small"
+          icon="el-icon-upload"
+          style="width: 200px"
+          @click="_handleResetInspector"
+          :disabled="!isModified"
+        >
+          Reset
+        </el-button>
+      </div>
+    </template>
   </div>
-  </template>
-</div>
 </template>
 
 <script lang="ts">
@@ -56,24 +63,60 @@
 // Libs
 import Vue from 'vue'
 
-// Constants / Interfaces
-import {
-  DataRecord,
-  FeathersRecord,
-  IServiceConnection
-} from '@/interfaces'
+// Constants & Interfaces
+import { DataRecord } from '@/services/feathers-server.interfaces'
+import { IService } from '@/models/service.interfaces'
 
 // Utils
 import {
   cleanFeathersRecord,
   jsonStr,
   pJsonStr,
-  validateJsonStr
+  validateJsonStr,
 } from '@/utils/data-utils'
 
-export default Vue.extend({
+/*
+  Vuejs Interfaces
+*/
+interface IProps {
+  recordId: string
+  serviceInstance: IService
+}
 
-  props: ['recordId', 'serverConnection', 'serviceId'],
+interface IData {
+  jsonStr: string
+  inReset: boolean
+  isValid: boolean
+  showPrettyPrint: boolean
+  textAreaStr: string
+}
+
+interface IComputed {
+  isModified: boolean
+  textAreaStyles: DataRecord
+  selectedRecord: DataRecord | null
+  noRecordAvail: boolean
+}
+
+interface IMethods {
+  updateTextAreaStr(record: DataRecord): void
+  _handleUpdateRecord(): void
+  _handleResetInspector(): void
+  resetJsonRecord(): void
+  clearIsModified(): void
+}
+
+export default Vue.extend<IData, IMethods, IComputed, IProps>({
+  props: {
+    recordId: {
+      type: String,
+      required: true,
+    },
+    serviceInstance: {
+      type: Object as () => IService,
+      required: true,
+    },
+  },
 
   data() {
     return {
@@ -86,15 +129,14 @@ export default Vue.extend({
   },
 
   computed: {
-
-    isModified() : boolean {
+    isModified(): boolean {
       const { jsonStr } = this
-      return (jsonStr !== '')
+      return jsonStr !== ''
     },
 
-    textAreaStyles() : DataRecord {
+    textAreaStyles(): DataRecord {
       const { isValid } = this
-      let style : DataRecord = {}
+      let style: DataRecord = {}
       if (!isValid) {
         style = {
           border: '2px solid red',
@@ -103,50 +145,44 @@ export default Vue.extend({
       return style
     },
 
-    selectedService() : IServiceConnection | null {
-      const { serverConnection } = this
-      return (serverConnection) ? serverConnection.selectedService : null
+    selectedRecord(): DataRecord | null {
+      const { serviceInstance, recordId } = this
+
+      const fRec = recordId ? serviceInstance.getRecordById(recordId) : null
+      return fRec ? cleanFeathersRecord(fRec) : null
     },
 
-    selectedRecord() : DataRecord | null {
-      const { selectedService } = this
-      const fRec = (selectedService) ? selectedService.selectedRecord : null
-      return (fRec) ? cleanFeathersRecord(fRec) : null
+    noRecordAvail(): boolean {
+      return this.selectedRecord === null
     },
-
-    noRecordAvail() : boolean {
-      return (this.selectedRecord === null)
-    },
-
   },
 
   methods: {
-
-    updateTextAreaStr(record:any) {
+    updateTextAreaStr(record: DataRecord) {
       const { showPrettyPrint } = this
-      this.textAreaStr = (showPrettyPrint) ? pJsonStr(record) : jsonStr(record)
+      this.textAreaStr = showPrettyPrint ? pJsonStr(record) : jsonStr(record)
     },
 
-    handleUpdateRecord() {
-      const { selectedService, textAreaStr, recordId } = this
+    _handleUpdateRecord() {
+      const { serviceInstance, textAreaStr, recordId } = this
       const data = JSON.parse(textAreaStr)
-      if (selectedService) {
-        selectedService.updateRecord(recordId, data)
-          .then(result => console.log('OK record update record', result))
-          .then(result => {
-            this.clearIsModified()
-            return result
-          })
-          .catch(err => console.warn('ERR update record', err))
-      }
+
+      serviceInstance
+        .updateRecord(recordId, data)
+        .then((result) => console.log('OK record update record', result))
+        .then((result) => {
+          this.clearIsModified()
+          return result
+        })
+        .catch((err) => console.warn('ERR update record', err))
     },
 
-    handleResetInspector() {
+    _handleResetInspector() {
       this.resetJsonRecord()
     },
 
     resetJsonRecord() {
-      const { selectedRecord, showPrettyPrint } = this
+      const { selectedRecord } = this // showPrettyPrint
       this.inReset = true
       if (selectedRecord === null) {
         this.textAreaStr = ''
@@ -159,17 +195,15 @@ export default Vue.extend({
     clearIsModified() {
       this.jsonStr = ''
     },
-
   },
 
   watch: {
-
     selectedRecord() {
       this.resetJsonRecord()
     },
 
-    textAreaStr(newVal, oldVal) {
-      const { inReset, showPrettyPrint } = this
+    textAreaStr(newVal) {
+      const { inReset } = this // showPrettyPrint
       this.isValid = validateJsonStr(newVal)
       if (!inReset) {
         this.jsonStr = jsonStr(newVal)
@@ -177,23 +211,20 @@ export default Vue.extend({
       this.inReset = false
     },
 
-    showPrettyPrint(newVal, oldVal) {
+    showPrettyPrint() {
       const { textAreaStr } = this
       const rec = JSON.parse(textAreaStr)
       this.updateTextAreaStr(rec)
     },
-
   },
-
 })
 </script>
 
 <style lang="scss" scoped>
 #record-inspector {
-
   .text-error {
-    color:red;
-    margin: 10px 0 5px
+    color: red;
+    margin: 10px 0 5px;
   }
   .selected-path {
     font-weight: bold;

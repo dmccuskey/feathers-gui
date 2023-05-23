@@ -1,24 +1,25 @@
 <template>
-<el-row :span="24" :gutter="20">
-  <el-col :span="6">
-    <side-bar
-      :serverConnection="currentServerConnection"
-    />
-  </el-col>
-  <el-col :span="12">
-    <service-viewer
-      :serverConnection="currentServerConnection"
-      :serviceId="currentServiceId"
-    />
-  </el-col>
-  <el-col :span="6">
-  <record-inspector
-    :serverConnection="currentServerConnection"
-    :serviceId="currentServiceId"
-    :recordId="currentRecordId"
-  />
-  </el-col>
-</el-row>
+  <el-row :span="24" :gutter="20">
+    <el-col :span="6">
+      <side-bar />
+    </el-col>
+    <el-col :span="12">
+      <template v-if="haveCurrentService">
+        <service-viewer :serviceInstance="currentServiceInstance" />
+      </template>
+      <template v-else>
+        <div style="padding-top: 10px">No Service Selected</div>
+      </template>
+    </el-col>
+    <el-col :span="6">
+      <template v-if="haveCurrentService && haveCurrentRecordId">
+        <record-inspector
+          :serviceInstance="currentServiceInstance"
+          :recordId="currentRecordId"
+        />
+      </template>
+    </el-col>
+  </el-row>
 </template>
 
 <script lang="ts">
@@ -30,14 +31,37 @@
 // Libs
 import Vue from 'vue'
 
+// Constants & Interfaces
+import { IService } from '@/models/service.interfaces'
+
 // Components
 import RecordInspector from './RecordInspector.vue'
 import ServiceViewer from './ServiceViewer.vue'
 import SideBar from './SideBar.vue'
-import { IServerConnection } from '@/interfaces'
+import store from '@/store'
 
-export default Vue.extend({
+/*
+  Vuejs Interfaces
+*/
+interface IProps {
+  service: IService | null
+}
 
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+interface IData {}
+
+interface IComputed {
+  currentServiceId: string | null
+  currentRecordId: string | null
+  currentServiceInstance: IService | null
+  haveCurrentService: boolean
+  haveCurrentRecordId: boolean
+}
+
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+interface IMethods {}
+
+export default Vue.extend<IData, IMethods, IComputed, IProps>({
   name: 'AppMain',
 
   components: {
@@ -47,25 +71,34 @@ export default Vue.extend({
   },
 
   computed: {
-
-    currentServerId() : string {
-      return this.$store.getters['currentServerId']
+    currentServiceId() {
+      return store.state.currentServiceId
     },
 
-    currentServiceId() : string {
-      return this.$store.getters['currentServiceId']
+    currentRecordId() {
+      return store.state.currentRecordId
     },
 
-    currentRecordId() : string {
-      return this.$store.getters['currentRecordId']
+    currentServiceInstance(): IService | null {
+      const { serviceInstances } = store.state
+      const { currentServiceId } = this
+
+      const instance = Object.values(serviceInstances).find(
+        (item) => item.id === currentServiceId
+      )
+
+      return instance || null
     },
 
-    currentServerConnection() : IServerConnection | null {
-      const { currentServerId } = this
-      const getSrvrConnByIdFunc = this.$store.getters['getServerConnectionByServerId']
-      return getSrvrConnByIdFunc(currentServerId)
+    haveCurrentService() {
+      const { currentServiceInstance } = this
+      return currentServiceInstance !== null
     },
 
+    haveCurrentRecordId() {
+      const { currentRecordId } = this
+      return currentRecordId !== null
+    },
   },
 })
 </script>

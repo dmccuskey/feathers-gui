@@ -1,10 +1,10 @@
 <template>
-<div id="browser-view">
-  <feathers-gui-support />
-  <app-header />
-  <app-main />
-  <app-footer />
-</div>
+  <div id="browser-view">
+    <dialog-controller />
+    <app-header />
+    <app-main />
+    <app-footer />
+  </div>
 </template>
 
 <script lang="ts">
@@ -15,19 +15,19 @@ import Vue from 'vue'
 import AppFooter from '@/components/AppFooter.vue'
 import AppHeader from '@/components/AppHeader.vue'
 import AppMain from '@/components/AppMain.vue'
-import FeathersGuiSupport from '@/components/FeathersGuiSupport.vue'
+
+// Controllers & Services
+import DialogController from '@/components/DialogController.vue'
 
 export default Vue.extend({
-
   name: 'App',
 
   components: {
     AppFooter,
     AppHeader,
     AppMain,
-    FeathersGuiSupport,
+    DialogController,
   },
-
 })
 </script>
 

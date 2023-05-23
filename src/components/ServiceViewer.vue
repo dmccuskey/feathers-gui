@@ -1,59 +1,53 @@
 <template>
-<div>
-  <div class="section-title">Service Viewer</div>
+  <div>
+    <div class="section-title">Service Viewer</div>
 
-  <div style="padding-top:10px"
-    v-if="!_hasSelectedService"
-  >
-    No Service Selected
+    <div style="padding-top: 10px">
+      Viewing: <span class="selected-path"> {{ serviceInstance.path }} </span>
+      <service-actions :serviceInstance="serviceInstance" />
+      <records-viewer :serviceInstance="serviceInstance" />
+    </div>
   </div>
-  <div style="padding-top:10px"
-    v-else
-  >
-    Viewing: <span class="selected-path">{{ selectedService.path }}</span>
-    <service-actions
-      :serviceConnection="selectedService"
-    />
-    <records-viewer
-      :serviceConnection="selectedService"
-    />
-  </div>
-</div>
 </template>
 
 <script lang="ts">
 // Libs
 import Vue from 'vue'
 
-// Constants / Interfaces
-import { IServiceConnection } from '@/interfaces'
-
 // Components
 import ServiceActions from './ServiceActions.vue'
 import RecordsViewer from './RecordsViewer.vue'
+import { IService } from '@/models/service.interfaces'
 
-export default Vue.extend({
+/*
+  Vuejs Interfaces
+*/
+interface IProps {
+  serviceInstance: IService
+}
 
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+interface IData {}
+
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+interface IComputed {}
+
+// eslint-disable-next-line @typescript-eslint/no-empty-interface
+interface IMethods {}
+
+export default Vue.extend<IData, IMethods, IComputed, IProps>({
   name: 'ServiceViewer',
 
-  props: ['serverConnection'],
+  props: {
+    serviceInstance: {
+      type: Object as () => IService,
+      default: null,
+    },
+  },
 
   components: {
     RecordsViewer,
     ServiceActions,
-  },
-
-  computed: {
-
-    selectedService() : IServiceConnection | null {
-      const { serverConnection } = this
-      return (serverConnection) ? serverConnection.selectedService : null
-    },
-
-    _hasSelectedService() {
-      return (this.selectedService !== null)
-    },
-
   },
 })
 </script>
