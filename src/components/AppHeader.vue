@@ -9,30 +9,6 @@
       >
       <router-link class="nav-item" :to="{ name: 'about' }">About</router-link>
     </div>
-
-    <div class="server-select">
-      <div class="title">Servers:</div>
-      <el-select
-        size="large"
-        placeholder="Select Server"
-        no-data-text="No Servers to Display"
-        @change="_handleServerSelect"
-        v-model="selectedServerId"
-      >
-        <el-option
-          v-for="item in selectOptions"
-          :key="item.value"
-          :label="item.label"
-          :value="item.value"
-        />
-      </el-select>
-      <el-button
-        class="select-btn"
-        icon="el-icon-setting"
-        circle
-        @click="_handleShowSettings"
-      />
-    </div>
   </el-header>
 </template>
 
@@ -40,90 +16,8 @@
 // Libs
 import Vue from 'vue'
 
-// Constants & Interfaces
-import { Server, ServerHash } from '@/models/server.interfaces'
-
-// Controllers & Services
-import AppCtrl from '@/controllers/app-ctrl.model'
-
-interface SelectOption {
-  value: string
-  label: string
-}
-
-/*
-  Vuejs Interfaces
-*/
-// eslint-disable-next-line @typescript-eslint/no-empty-interface
-interface IProps {}
-
-interface IData {
-  selectedServerId: string
-}
-
-interface IComputed {
-  currentServerId: string | null
-  serverConfigs: ServerHash
-  serversList: Server[]
-  selectOptions: SelectOption[]
-}
-
-interface IMethods {
-  _handleServerSelect(serverId: string): void
-  _handleShowSettings(): void
-}
-
-export default Vue.extend<IData, IMethods, IComputed, IProps>({
-  data() {
-    return {
-      selectedServerId: '',
-    }
-  },
-
-  computed: {
-    currentServerId() {
-      return AppCtrl.currentServerId
-    },
-
-    serverConfigs() {
-      return AppCtrl.serverConfigs
-    },
-
-    serversList() {
-      return AppCtrl.serversList
-    },
-
-    selectOptions() {
-      const { serversList } = this
-
-      return serversList.map(function (item) {
-        const { id, url, name } = item
-        const label = name !== '' ? `${name} (${url})` : url
-        return {
-          value: id,
-          label,
-        }
-      })
-    },
-  },
-
-  methods: {
-    _handleServerSelect(serverId: string) {
-      const { serverConfigs } = this
-
-      const serverConfig = serverConfigs[serverId]
-      AppCtrl.activateServer(serverConfig)
-    },
-
-    _handleShowSettings() {
-      void AppCtrl.showManageServersDialog()
-    },
-  },
-
-  mounted() {
-    const { currentServerId } = this
-    this.selectedServerId = currentServerId || ''
-  },
+export default Vue.extend({
+  name: 'AppHeader',
 })
 </script>
 
@@ -159,27 +53,6 @@ $item-margin: 20px;
       text-decoration: none;
       color: yellow;
       font-size: 16px;
-    }
-  }
-
-  .server-select {
-    display: flex;
-    flex-direction: row;
-    justify-content: flex-end;
-    align-items: center;
-
-    width: 440px;
-
-    .title {
-      margin-right: $item-margin;
-    }
-
-    .el-select {
-      width: 260px;
-    }
-
-    .select-btn {
-      margin-left: $item-margin;
     }
   }
 }
