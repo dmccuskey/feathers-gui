@@ -11,9 +11,10 @@
 
 // Libs
 import Vue from 'vue'
-import { Paginated, Params } from '@feathersjs/feathers'
+import Debug from 'debug'
 
 // Constants / Interfaces
+import { Paginated, Params } from '@feathersjs/feathers'
 import { FeathersServerEvent } from './feathers-server.constants'
 import {
   IData,
@@ -24,6 +25,7 @@ import {
   IServiceError,
   DataArrayCallbackListener,
   DataRecordCallbackListener,
+  CreateFeathersServiceProps,
 } from './feathers-service.interfaces'
 import {
   DataRecord,
@@ -35,7 +37,9 @@ import {
   IFeathersServerReadyEvent,
 } from '@/services/feathers-server.interfaces'
 
-// Components
+// Config
+
+const LogPrefix = '[Feathers Service]'
 
 const Event = {
   LOADED: '--loaded-event--',
@@ -63,14 +67,9 @@ function isDataRecord<T>(response: FeathersFindResponse<T>): response is T {
 }
 
 export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
-  name: 'service-model',
+  name: 'feathers-service',
 
   props: {
-    // TODO: abilty to change path
-    path: {
-      type: String,
-      required: true,
-    },
     fServer: {
       type: Object as () => IFeathersServer,
       required: true,
@@ -79,6 +78,8 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
   data() {
     return {
+      debug: null,
+      path: '',
       isInitialized: false,
       isError: null,
       params: {},
@@ -198,7 +199,7 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
         .then(emitEvent)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .catch((fError: any) => {
-          console.warn('FGUI:SRVC CONN _loadRecords', fError)
+          console.warn(`ERROR ${LogPrefix} _loadRecords:find()`, fError)
           const { name, message, code } = fError
           const err: IServiceError = {
             code,
@@ -239,15 +240,16 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
       }
     },
     _doServerIsInitializedActions() {
-      const { fServerInitialized } = this
+      const { fServerInitialized, path } = this
 
       if (fServerInitialized) return
 
-      this._setupServiceListeners()
+      this._setupServiceListeners(path)
       this.fServerInitialized = true
     },
     _doServerNotInitializedActions() {
-      this._removeServiceListeners()
+      const { path } = this
+      this._removeServiceListeners(path)
       this.fServerInitialized = false
     },
 
@@ -287,8 +289,8 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
       fServer.$off(IS_READY, this._handleServerReadyChange)
     },
 
-    _setupServiceListeners() {
-      const { path, fServer } = this
+    _setupServiceListeners(path: string) {
+      const { fServer } = this
 
       fServer.onCreated(path, this._handleOnCreated)
       fServer.onRemoved(path, this._handleOnRemoved)
@@ -296,37 +298,59 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
       fServer.onPatched(path, this._handleOnPatched)
     },
 
-    _removeServiceListeners() {
-      const { path, fServer } = this
+    _removeServiceListeners(path: string) {
+      const { fServer } = this
 
       fServer.offCreated(path, this._handleOnCreated)
       fServer.offRemoved(path, this._handleOnRemoved)
       fServer.offUpdated(path, this._handleOnUpdated)
       fServer.offPatched(path, this._handleOnPatched)
     },
+
+    _initialize() {
+      const { fServer } = this
+
+      if (fServer.isInitialized) {
+        this._doServerIsInitializedActions()
+      }
+      if (fServer.isConnected) {
+        this._doServerIsConnectedActions()
+      }
+      if (fServer.isConnected) {
+        this._doServerIsReadyActions()
+      }
+
+      this.isInitialized = true
+    },
+
+    _ctor(props) {
+      const { path } = props
+
+      this.debug = Debug(`feathers-service:${path}`)
+
+      this.path = path
+      this._setupServerListeners()
+      this._initialize()
+    },
+
+    _dtor() {
+      const { path } = this
+      this._removeServiceListeners(path)
+      this._removeServerListeners()
+
+      this.debug = null
+      this.path = ''
+    },
   },
 
-  created() {
-    const { fServer } = this
+  watch: {
+    path(nV, oV) {
+      if (nV == '' || oV == '') return
+      if (nV == oV) return
 
-    this._setupServerListeners()
-
-    if (fServer.isInitialized) {
-      this._doServerIsInitializedActions()
-    }
-    if (fServer.isConnected) {
-      this._doServerIsConnectedActions()
-    }
-    if (fServer.isConnected) {
-      this._doServerIsReadyActions()
-    }
-
-    this.isInitialized = true
-  },
-
-  beforeDestroy() {
-    this._removeServiceListeners()
-    this._removeServerListeners()
+      this._removeServiceListeners(oV)
+      this._setupServiceListeners(nV)
+    },
   },
 })
 
@@ -334,17 +358,19 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
   create Service based on structure
 */
 export const create = function (
-  fServer: IFeathersServer,
-  path: string
+  props: CreateFeathersServiceProps
 ): IFeathersService {
-  return new ObjectClass({
+  const { fServer } = props
+  const obj = new ObjectClass({
     propsData: {
-      path,
       fServer,
     },
   })
+  obj._ctor(props)
+  return obj
 }
 
 export const destroy = function (instance: IFeathersService): void {
+  instance._dtor()
   instance.$destroy()
 }

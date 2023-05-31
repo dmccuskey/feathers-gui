@@ -37,16 +37,9 @@ import {
   BooleanEventCallback,
 } from './feathers-server.interfaces'
 
-// Utils
+// Config
 
-const LogPrefix = '[Feathers Srvc]'
-
-/*
-  active Feathers client ; singleton
-  this is the actual connection to Feathers Database
-  will be created/destroyed as necessary
-*/
-let gClient: Application<any> | null = null
+const LogPrefix = '[Feathers Server]'
 
 /*
   Helper functions
@@ -87,6 +80,7 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
       debug: null,
       socket: null,
+      client: null,
       stateMachine: null,
       errorCount: 0,
       serviceCallbacks: {
@@ -255,11 +249,11 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
     */
 
     _getClient(): Application<any> | null {
-      return gClient
+      return this.client
     },
 
     _removeClient(): void {
-      gClient = null
+      this.client = null
     },
 
     _service(location: string): Service<any> {
@@ -273,7 +267,7 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
     },
 
     _storeClient(client: Application<any>) {
-      gClient = client
+      this.client = client
     },
 
     /*
@@ -359,7 +353,7 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
     },
 
     _doAuthentication() {
-      const { authentication } = this
+      const { authentication, debug } = this
 
       if (authentication == null) {
         this.isAuthenticated = true
@@ -368,8 +362,8 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
           .then(() => {
             this.isAuthenticated = true
           })
-          .catch((error: any) => {
-            console.log('error authenticating', error)
+          .catch((err: any) => {
+            debug && debug('error authenticating', err)
             this.isAuthenticated = false
           })
       }
@@ -379,7 +373,7 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
     _doStateConnect() {
       const { url, debug } = this
-      debug && debug(`${LogPrefix} Attempting Connection to (${url})`)
+      debug && debug(`attempting connection to (${url})`)
 
       // socket
       const io = createSocket({ url })
@@ -429,11 +423,111 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
       // socket.on('error', this._handleSocketError)
     },
 
+    _createStateMachine() {
+      const sM = new StateMachine({
+        init: 'created',
+
+        transitions: [
+          {
+            // initialize()
+            name: 'initialize',
+            from: 'created',
+            to: 'initialized',
+          },
+          {
+            // connect()
+            name: 'connect',
+            from: 'initialized',
+            to: 'connecting',
+          },
+          {
+            // connect()
+            name: 'connect',
+            from: 'disconnected',
+            to: 'connecting',
+          },
+          // disconnect()
+          // { name: 'disconnect', from: ['initialized', 'disconnected'], to: 'disconnected' },
+          // { name: 'disconnect', from: 'connected', to: 'disconnecting' },
+          // { name: 'disconnect', from: 'connecting', to: 'disconnecting' },
+
+          // (socket transitions)
+          {
+            // connectOk()
+            name: 'connectOk',
+            from: ['connecting', 'recovered'],
+            to: 'connected',
+          },
+          {
+            // connectErr()
+            name: 'connectErr',
+            from: ['connecting', 'disconnecting'],
+            to: 'disconnected',
+          },
+          {
+            // connectErr()
+            name: 'connectErr',
+            from: 'connected',
+            to: 'recovered',
+          },
+        ],
+
+        data: {},
+
+        methods: {
+          onEnterCreated: () => {
+            const { debug } = this
+            debug && debug(`server created`)
+          },
+
+          onEnterInitialized: () => {
+            this._doStateInitialize()
+          },
+
+          onAfterInitialize: () => {
+            const { stateMachine, isActive } = this
+
+            if (isActive) {
+              Vue.nextTick(() => stateMachine.connect())
+            } else {
+              Vue.nextTick(() => stateMachine.disconnect())
+            }
+          },
+
+          onEnterConnecting: () => {
+            this._doStateConnect()
+          },
+
+          onEnterConnected: () => {
+            const { url, debug } = this
+            debug && debug(`socket is connected (${url})`)
+
+            this.isConnected = true
+            this._doAuthentication()
+          },
+        },
+      })
+
+      return sM
+    },
+
     _ctor(props: CreateFeathersServerProps) {
       const { url, authentication } = props
 
+      this.debug = Debug(`feathers-server`)
+
       this.url = url
       this.authentication = authentication
+
+      this.stateMachine = this._createStateMachine()
+      this.stateMachine.initialize()
+    },
+
+    _dtor() {
+      this.stateMachine = null
+      this.url = ''
+      this.authentication = null
+      this.debug = null
     },
   },
 
@@ -472,118 +566,19 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
       this._emitEvent(event)
     },
   },
-
-  created() {
-    this.debug = Debug(`app:feathers`)
-
-    this.stateMachine = new StateMachine({
-      init: 'created',
-
-      transitions: [
-        {
-          // initialize()
-          name: 'initialize',
-          from: 'created',
-          to: 'initialized',
-        },
-        {
-          // connect()
-          name: 'connect',
-          from: 'initialized',
-          to: 'connecting',
-        },
-        {
-          // connect()
-          name: 'connect',
-          from: 'disconnected',
-          to: 'connecting',
-        },
-        // disconnect()
-        // { name: 'disconnect', from: ['initialized', 'disconnected'], to: 'disconnected' },
-        // { name: 'disconnect', from: 'connected', to: 'disconnecting' },
-        // { name: 'disconnect', from: 'connecting', to: 'disconnecting' },
-
-        // (socket transitions)
-        {
-          // connectOk()
-          name: 'connectOk',
-          from: ['connecting', 'recovered'],
-          to: 'connected',
-        },
-        {
-          // connectErr()
-          name: 'connectErr',
-          from: ['connecting', 'disconnecting'],
-          to: 'disconnected',
-        },
-        {
-          // connectErr()
-          name: 'connectErr',
-          from: 'connected',
-          to: 'recovered',
-        },
-      ],
-
-      data: {},
-
-      methods: {
-        onEnterCreated: () => {
-          const { debug } = this
-          debug && debug(`Service Created`)
-        },
-
-        onEnterInitialized: () => {
-          this._doStateInitialize()
-        },
-
-        onAfterInitialize: () => {
-          const { stateMachine, isActive } = this
-
-          if (isActive) {
-            Vue.nextTick(() => stateMachine.connect())
-          } else {
-            Vue.nextTick(() => stateMachine.disconnect())
-          }
-        },
-
-        onEnterConnecting: () => {
-          this._doStateConnect()
-        },
-
-        onEnterConnected: () => {
-          const { url, debug } = this
-
-          debug && debug(`Socket is Connected (${url})`)
-          this.isConnected = true
-
-          this._doAuthentication()
-        },
-      },
-    })
-    this.stateMachine.initialize()
-  },
 })
 
-let singleton: IFeathersServer // | null = null
-
-/*
-  create Feathers Service based on structure
-*/
+// create Feathers Server connection
 export const create = (props: CreateFeathersServerProps): IFeathersServer => {
-  if (!singleton) {
-    // console.log(`${LogPrefix} creating service connector`)
-    singleton = new ObjectClass({
-      propsData: {},
-    })
-    singleton._ctor(props)
-  }
-  return singleton
+  const obj = new ObjectClass({
+    propsData: {},
+  })
+  obj._ctor(props)
+  return obj
 }
 
+// create Feathers Server connection
 export const destroy = (instance: IFeathersServer): void => {
+  instance._dtor()
   instance.$destroy()
-}
-
-export const getInstance = (): IFeathersServer => {
-  return singleton
 }

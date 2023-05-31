@@ -46,6 +46,7 @@ export interface IProps {
 }
 
 export interface IData {
+  debug: debug.IDebugger | null
   fService: IFeathersService | null
   data: FeathersRecordHash
   fields: ServiceField[]
@@ -88,6 +89,7 @@ export interface IMethods {
   _updateRecordTemplate(record: FeathersRecord): void
   _saveServiceChanges(): void
   _ctor(props: Service): void
+  _dtor(): void
 }
 
 export type IService = Vue & IData & IMethods & IComputed & IProps
