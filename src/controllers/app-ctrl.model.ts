@@ -44,14 +44,25 @@ const Event = {
   DISPLAY_DIALOG: '--display-dialog-event--',
 }
 
+const fGuiHostname = 'feathersgui.dev'
+
 const handleCatch = () => {
   // pass
 }
 
 const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
-  name: 'AppCtrl',
+  name: 'app-ctrl-model',
 
   computed: {
+    hostname() {
+      return window.location.hostname
+    },
+
+    usingFeathersGui() {
+      const { hostname } = this
+      return hostname.includes(fGuiHostname)
+    },
+
     currentServerId() {
       return store.state.currentServerId
     },
@@ -69,6 +80,15 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
     serverInstance() {
       return store.state.serverInstance
+    },
+
+    serviceInstances() {
+      return store.state.serviceInstances
+    },
+
+    serviceInstanceList() {
+      const { serviceInstances } = this
+      return Object.values(serviceInstances)
     },
 
     serversList() {
@@ -122,13 +142,19 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
       store.commit(Mutations.REMOVE_SERVER, server)
     },
 
+    activateServerById(serverId: string) {
+      const { serverConfigs } = this
+
+      const server = serverConfigs[serverId]
+      this.activateServer(server)
+    },
+
     activateServer(server: Server) {
       const { serverInstance } = this
 
       // destroy current server instance
       if (serverInstance !== null) {
         this._destroyCurrentIServer()
-        this._setCurrentServerId(null)
       }
 
       // create new server instance
@@ -345,6 +371,7 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
       if (serverInstance) destroyServer(serverInstance)
       this._setCurrentServer(null)
+      this._setCurrentServerId(null)
     },
 
     // load server data from data store & create instances
@@ -358,6 +385,12 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
     _ctor() {
       this._initializeServer()
+    },
+  },
+
+  watch: {
+    serviceInstances(nV) {
+      console.log('serviceInstances', nV)
     },
   },
 })

@@ -4,11 +4,9 @@
       <router-link class="app-title" :to="{ name: 'home' }"
         >Feathers GUI</router-link
       >
-      <router-link class="nav-item" :to="{ name: 'browser' }"
-        >Browser</router-link
-      >
-      <router-link class="nav-item" :to="{ name: 'about' }">About</router-link>
+      <router-link class="nav-item" :to="{ name: 'info' }">Info</router-link>
     </div>
+    <a class="link" href="https://github.com/dmccuskey/feathers-gui">github</a>
   </el-header>
 </template>
 
@@ -29,6 +27,7 @@ $item-margin: 20px;
   height: 30px;
   color: white;
   padding: 10px;
+  margin-bottom: 20px;
   font-size: 1.5rem;
 
   display: flex;
@@ -54,6 +53,11 @@ $item-margin: 20px;
       color: yellow;
       font-size: 16px;
     }
+  }
+  .link {
+    text-decoration: none;
+    color: yellow;
+    font-size: 16px;
   }
 }
 </style>

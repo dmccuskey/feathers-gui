@@ -13,6 +13,8 @@ import {
   SelectServiceFieldsDialogProps,
 } from './dialog.interfaces'
 import {
+  IService,
+  IServiceHash,
   PropertyLookupHash,
   Service,
   ServiceProps,
@@ -64,6 +66,10 @@ export interface IComputed {
   currentServerConfig: Server | null
   currentServiceId: string | null
   serverInstance: IServer | null
+  serviceInstances: IServiceHash
+  serviceInstanceList: IService[]
+  hostname: string
+  usingFeathersGui: boolean
 }
 
 export interface IMethods {
@@ -72,6 +78,7 @@ export interface IMethods {
   updateServer(server: Server): void
 
   activateServer(server: Server): void
+  activateServerById(serverId: string): void
   addService(props: ServiceProps): void
   removeService(id: string): void
   _getServicesByServerId(id: string): Service[]

@@ -1,9 +1,8 @@
 <template>
-<div id="home-view">
-  <app-header />
-  Easy to use interface for Feathers Servers
-  <app-footer />
-</div>
+  <div id="feathers-view">
+    <dialog-controller />
+    <feathers-browser />
+  </div>
 </template>
 
 <script lang="ts">
@@ -11,17 +10,26 @@
 import Vue from 'vue'
 
 // Components
-import AppFooter from '@/components/AppFooter.vue'
-import AppHeader from '@/components/AppHeader.vue'
+import FeathersBrowser from '@/components/FeathersBrowser.vue'
+
+// Controllers & Services
+import DialogController from '@/components/DialogController.vue'
 
 export default Vue.extend({
-
-  name: 'HomeView',
+  name: 'FeathersView',
 
   components: {
-    AppFooter,
-    AppHeader,
+    FeathersBrowser,
+    DialogController,
   },
-
 })
 </script>
+
+<style lang="scss">
+#feathers-view {
+  font-family: 'Avenir', Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: #2c3e50;
+}
+</style>
