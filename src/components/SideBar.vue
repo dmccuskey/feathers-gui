@@ -70,7 +70,7 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
     },
 
     haveServers() {
-      return this.serversList.length >= 0
+      return this.serversList.length > 0
       // return false // TEST
     },
   },
