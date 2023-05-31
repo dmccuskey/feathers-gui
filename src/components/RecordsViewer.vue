@@ -66,6 +66,10 @@ import { packPropertyTypeStruct } from '@/utils/data-utils'
 
 const showQuotes = true
 
+const noDataStr = (txt: string) => {
+  return `<span class="no-data">&lt;${txt}&gt;</span>`
+}
+
 const getSortFunc = (label: string, lookup: PropertyLookupHash) => {
   let type = lookup[label]
 
@@ -199,56 +203,66 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
       let data = record[label] // eg, '3425325'
 
       if (data === undefined) {
-        data = '<span class="no-data">&lt;undefined&gt;</span>'
+        data = noDataStr('undefined')
         type = 'undefined'
       }
 
       let result
       switch (type) {
         case 'undefined':
-          result = data
+          result = noDataStr('undefined')
           break
         case 'number':
-          result = data
+          result = data == null ? noDataStr('null') : data
           break
         case 'string':
-          result = data.toString()
-          if (showQuotes) {
-            result = `"${result}"`
+          if (data == null) {
+            result = noDataStr('null')
           } else {
-            result =
-              result === ''
-                ? '<span class="no-data">&lt;empty&gt;</span>'
-                : result
+            result = data.toString()
+            if (showQuotes) {
+              result = `"${result}"`
+            } else {
+              result = result === '' ? noDataStr('empty') : result
+            }
           }
           break
         case 'array':
-          if (Array.isArray(data)) {
+          if (data == null) {
+            result = noDataStr('null')
+          } else if (Array.isArray(data)) {
             result = `[ ${data.toString()} ]`
           } else {
-            result = '<span class="no-data">&lt;not an array&gt;</span>'
+            result = noDataStr('not an array')
           }
           break
         case 'date':
           try {
-            const d = new Date(data)
-            result = d.toISOString()
+            if (data == null) {
+              result = noDataStr('null')
+            } else {
+              const d = new Date(data)
+              result = d.toISOString()
+            }
           } catch (err) {
-            result = '<span class="no-data">&lt;not a date&gt;</span>'
+            result = noDataStr('not a date')
           }
           break
         case 'object':
           try {
-            result = JSON.stringify(data, null, ' ')
+            if (data == null) {
+              result = noDataStr('null')
+            } else {
+              result = JSON.stringify(data, null, ' ')
+            }
           } catch (err) {
-            result = '<span class="no-data">&lt;not an object&gt;</span>'
+            result = noDataStr('not an object')
           }
-          result = JSON.stringify(data, null, ' ')
           break
         case 'boolean':
         case 'relation':
         default:
-          result = data.toString()
+          result = data == null ? noDataStr('null') : data.toString()
           break
       }
       return result
