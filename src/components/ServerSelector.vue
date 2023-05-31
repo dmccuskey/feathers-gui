@@ -1,22 +1,12 @@
 <template>
-  <el-header id="app-header">
-    <div class="navigation">
-      <router-link class="app-title" :to="{ name: 'home' }"
-        >Feathers GUI</router-link
-      >
-      <router-link class="nav-item" :to="{ name: 'browser' }"
-        >Browser</router-link
-      >
-      <router-link class="nav-item" :to="{ name: 'about' }">About</router-link>
-    </div>
-
-    <div class="server-select">
-      <div class="title">Servers:</div>
+  <div id="server-selector">
+    <div class="title">Servers</div>
+    <div class="selector-row">
       <el-select
         size="large"
-        placeholder="Select Server"
+        :placeholder="selectorPlaceholderString"
         no-data-text="No Servers to Display"
-        @change="_handleServerSelect"
+        @change="_handleSelectServer"
         v-model="selectedServerId"
       >
         <el-option
@@ -30,21 +20,27 @@
         class="select-btn"
         icon="el-icon-setting"
         circle
-        @click="_handleShowSettings"
+        @click="_handleClickServerManagement"
       />
     </div>
-  </el-header>
+  </div>
 </template>
 
 <script lang="ts">
+/*
+  Server Selection component
+  displays configured servers, allows selection of current server
+*/
+
 // Libs
 import Vue from 'vue'
 
 // Constants & Interfaces
-import { Server, ServerHash } from '@/models/server.interfaces'
+import { Server } from '@/models/server.interfaces'
 
 // Controllers & Services
 import AppCtrl from '@/controllers/app-ctrl.model'
+import store from '@/store'
 
 interface SelectOption {
   value: string
@@ -63,17 +59,19 @@ interface IData {
 
 interface IComputed {
   currentServerId: string | null
-  serverConfigs: ServerHash
   serversList: Server[]
   selectOptions: SelectOption[]
+  selectorPlaceholderString: string
 }
 
 interface IMethods {
-  _handleServerSelect(serverId: string): void
-  _handleShowSettings(): void
+  _handleSelectServer(serverId: string): void
+  _handleClickServerManagement(): void
 }
 
 export default Vue.extend<IData, IMethods, IComputed, IProps>({
+  name: 'ServerSelector',
+
   data() {
     return {
       selectedServerId: '',
@@ -82,15 +80,12 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
 
   computed: {
     currentServerId() {
-      return AppCtrl.currentServerId
-    },
-
-    serverConfigs() {
-      return AppCtrl.serverConfigs
+      return store.state.currentServerId
     },
 
     serversList() {
       return AppCtrl.serversList
+      // return [] // TEST
     },
 
     selectOptions() {
@@ -98,6 +93,7 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
 
       return serversList.map(function (item) {
         const { id, url, name } = item
+
         const label = name !== '' ? `${name} (${url})` : url
         return {
           value: id,
@@ -105,17 +101,19 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
         }
       })
     },
+
+    selectorPlaceholderString() {
+      const { serversList } = this
+      return serversList.length == 0 ? 'No Servers' : 'Select Server'
+    },
   },
 
   methods: {
-    _handleServerSelect(serverId: string) {
-      const { serverConfigs } = this
-
-      const serverConfig = serverConfigs[serverId]
-      AppCtrl.activateServer(serverConfig)
+    _handleSelectServer(serverId: string) {
+      AppCtrl.activateServerById(serverId)
     },
 
-    _handleShowSettings() {
+    _handleClickServerManagement() {
       void AppCtrl.showManageServersDialog()
     },
   },
@@ -123,64 +121,48 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
   mounted() {
     const { currentServerId } = this
     this.selectedServerId = currentServerId || ''
+    // this.selectedServerId = '' // TEST
   },
 })
 </script>
 
 <style lang="scss" scoped>
-$item-margin: 20px;
+$item-xy: 20px;
+$item-lr: 10px;
+$item-margin: 10px;
+$item-max-width: 300px;
+$item-min-width: 200px;
 
-#app-header {
-  background-color: olivedrab;
-  height: 30px;
-  color: white;
-  padding: 10px;
-  font-size: 1.5rem;
-
-  display: flex;
-  flex-direction: row;
-  justify-content: space-between;
-
-  .navigation {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-
-    a {
-      margin: 0 14px;
-    }
-
-    .app-title {
-      text-decoration: none;
-      color: white;
-    }
-
-    .nav-item {
-      text-decoration: none;
-      color: yellow;
-      font-size: 16px;
-    }
+#server-selector {
+  .title {
+    font-weight: bold;
+    padding-bottom: 10px;
   }
-
-  .server-select {
+  .selector-row {
     display: flex;
     flex-direction: row;
-    justify-content: flex-end;
+    justify-content: left;
     align-items: center;
-
-    width: 440px;
-
-    .title {
-      margin-right: $item-margin;
-    }
+    width: 100%;
 
     .el-select {
-      width: 260px;
+      min-width: $item-min-width;
+      max-width: $item-max-width;
+      width: 100%;
     }
 
     .select-btn {
       margin-left: $item-margin;
     }
   }
+}
+</style>
+
+<style lang="scss">
+.el-input__inner {
+  border-width: 2px;
+}
+.el-select-dropdown__item {
+  font-family: 'Avenir', Helvetica, Arial, sans-serif;
 }
 </style>

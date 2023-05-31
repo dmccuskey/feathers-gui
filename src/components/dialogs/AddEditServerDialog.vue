@@ -1,13 +1,17 @@
 <template>
-  <el-dialog id="add-edit-server-dialog" title="Update Server" :visible="true">
-    add edit server
+  <el-dialog id="add-edit-server-dialog" :title="dialogTitle" :visible="true">
     <el-form v-model="serverForm">
       <el-form-item label="Server Name:">
         <el-input placeholder="my awesome server" v-model="serverForm.name" />
       </el-form-item>
+      <div class="notice" v-if="usingFeathersGui">
+        You are using Feathers GUI online, so your Feathersjs server must be
+        configured to use secure HTTPS.<br />
+        <a href="https://feathersgui.dev">See the online docs</a> for help.
+      </div>
       <el-form-item label="Server Url:">
         <el-input
-          placeholder="http://localhost:8080"
+          :placeholder="serverUrlPlaceholder"
           v-model="serverForm.url"
         />
       </el-form-item>
@@ -53,6 +57,9 @@ import {
 import { LocalAuthStruct, Server } from '@/models/server.interfaces'
 import { Events } from '@/controllers/dialog.constants'
 
+// Controllers & Services
+import AppCtrl from '@/controllers/app-ctrl.model'
+
 /*
   Vuejs Interfaces
 */
@@ -72,6 +79,7 @@ export interface IData {
     pValue: string
   }
 }
+
 export interface IComputed {
   props: AddEditServerDialogProps
   deferred: Deferred<AddEditServerDialogResultProps>
@@ -82,6 +90,9 @@ export interface IComputed {
   isEditAction: boolean
   confirmButtonText: string
   canConfirmDialog: boolean
+  serverUrlPlaceholder: string
+  usingFeathersGui: boolean
+  dialogTitle: string
 }
 
 export interface IMethods {
@@ -115,6 +126,17 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
   },
 
   computed: {
+    usingFeathersGui() {
+      return AppCtrl.usingFeathersGui
+    },
+
+    serverUrlPlaceholder() {
+      const { usingFeathersGui } = this
+      return usingFeathersGui
+        ? 'https://localhost:3030'
+        : 'http://localhost:3030'
+    },
+
     props() {
       const { data } = this
       return data.props as AddEditServerDialogProps
@@ -151,6 +173,11 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
     confirmButtonText(): string {
       const { isEditAction } = this
       return isEditAction ? 'Update' : 'Create'
+    },
+
+    dialogTitle(): string {
+      const { isEditAction } = this
+      return isEditAction ? 'Update Server' : 'Add Server'
     },
   },
 
