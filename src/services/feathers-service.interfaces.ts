@@ -34,12 +34,16 @@ export type IServerConnectionIsConnectedEvent = IServerConnectionEvent<boolean>
 export type DataRecordCallbackListener = (record: FeathersRecord) => void
 export type DataArrayCallbackListener = (records: FeathersRecord[]) => void
 
+export interface CreateFeathersServiceProps {
+  fServer: IFeathersServer
+  path: string
+}
+
 /*
   Vuejs Component Interfaces
 */
 
 export interface IProps {
-  path: string
   fServer: IFeathersServer
 }
 
@@ -47,6 +51,8 @@ export interface IProps {
 export interface IComputed {}
 
 export interface IData {
+  debug: debug.IDebugger | null
+  path: string
   isInitialized: boolean
   isError: IServiceError | null
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -104,8 +110,13 @@ export interface IMethods {
   _setupServerListeners(): void
 
   _removeServerListeners(): void
-  _setupServiceListeners(): void
-  _removeServiceListeners(): void
+  _setupServiceListeners(path: string): void
+  _removeServiceListeners(path: string): void
+
+  _initialize(): void
+
+  _ctor(props: CreateFeathersServiceProps): void
+  _dtor(): void
 }
 
 export type IFeathersService = Vue & IData & IComputed & IMethods & IProps

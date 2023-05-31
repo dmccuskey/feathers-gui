@@ -7,6 +7,7 @@
 
 // Libs
 import Vue from 'vue'
+import Debug from 'debug'
 
 // Constants & Interfaces
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -63,6 +64,8 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
   data() {
     return {
+      debug: null,
+
       fServer: null,
       url: '',
       name: '',
@@ -114,7 +117,8 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
     },
 
     _createFeathersServer() {
-      const { url, authentication } = this
+      const { url, authentication, debug } = this
+      debug && debug('created feathers-server')
 
       const auth = authentication
         ? createFeathersServerAuthRequest(authentication)
@@ -135,6 +139,7 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
         console.log('IS_READY')
       })
       */
+
       this.fServer = fServer
     },
 
@@ -152,7 +157,7 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
       let ids: string[]
 
-      // add services
+      // add new services
       ids = serviceInstances.map((item) => item.id)
       serviceConfigs.forEach((config) => {
         const { id } = config
@@ -162,7 +167,7 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
         this._addServiceInstance(instance)
       })
 
-      // remove remove services
+      // remove old services
       ids = serviceConfigs.map((item) => item.id)
       serviceInstances.forEach((item) => {
         const { id } = item
@@ -183,6 +188,7 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
     _ctor(props: Server) {
       const { url, name, authentication } = props
+      this.debug = Debug(`server:${name}`)
 
       this.url = url
       this.name = name
@@ -190,6 +196,18 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
       this._createFeathersServer()
       this._updateFeathersServices()
+    },
+
+    _dtor() {
+      const { serviceInstances } = this
+
+      // remove all service instances
+      serviceInstances.forEach((item) => {
+        this._removeServiceInstance(item)
+        destroyService(item)
+      })
+
+      this._destroyFeathersServer()
     },
   },
 
@@ -218,5 +236,6 @@ export const create = function (props: Server): IServer {
 }
 
 export const destroy = function (instance: IServer): void {
+  instance._dtor()
   instance.$destroy()
 }
