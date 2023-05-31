@@ -2,7 +2,7 @@
   <el-dialog id="add-edit-server-dialog" :title="dialogTitle" :visible="true">
     <el-form v-model="serverForm">
       <el-form-item label="Server Name:">
-        <el-input placeholder="my awesome server" v-model="serverForm.name" />
+        <el-input placeholder="My Awesome Server" v-model="serverForm.name" />
       </el-form-item>
       <div class="notice" v-if="usingFeathersGui">
         You are using Feathers GUI online, so your Feathersjs server must be

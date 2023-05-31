@@ -6,16 +6,8 @@
 
     <template v-if="!haveServers">
       <div class="no-server-warning">
-        <div class="note">
-          There are no servers to which we can connect. <br />Click the button
-          to add a server.
-        </div>
-        <el-button
-          type="success"
-          icon="el-icon-plus"
-          circle
-          @click="_handleAddNewServer"
-        />
+        <div class="note">There are no servers to which we can connect.</div>
+        <div class="note">Click the button to add a server.</div>
       </div>
     </template>
 
@@ -60,11 +52,7 @@
         >
           Add Server
         </el-button>
-        <el-button
-          type="primary"
-          :disabled="!haveServers"
-          @click="_handleConfirmDialog"
-        >
+        <el-button type="primary" @click="_handleConfirmDialog">
           Done
         </el-button>
       </span>
@@ -159,6 +147,7 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
   .no-server-warning {
     .note {
       margin-bottom: 16px;
+      text-align: center;
     }
   }
   .dialog-footer {

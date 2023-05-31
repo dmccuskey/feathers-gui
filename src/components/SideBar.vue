@@ -3,10 +3,10 @@
     <server-selector />
 
     <template v-if="!haveServers">
-      <div class="notice">Add your first server</div>
+      <p class="notice">Add your first server</p>
     </template>
     <template v-else-if="!haveSelectedServer">
-      <div class="notice">Select A Server</div>
+      <p class="notice">Select a Server</p>
     </template>
     <template v-else>
       <service-selector />
@@ -66,12 +66,10 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
 
     haveSelectedServer() {
       return this.currentServerInstance !== null
-      // return false // TEST
     },
 
     haveServers() {
       return this.serversList.length > 0
-      // return false // TEST
     },
   },
 })

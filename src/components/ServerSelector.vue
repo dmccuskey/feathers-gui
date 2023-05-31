@@ -85,7 +85,6 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
 
     serversList() {
       return AppCtrl.serversList
-      // return [] // TEST
     },
 
     selectOptions() {
