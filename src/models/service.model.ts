@@ -1,7 +1,7 @@
 /*
-  Feathers Service Class
+  Service Class
 
-  there is a single instance per service path, eg '/messages'
+  there is a single instance per service name, eg 'messages'
 
   the model handles loading data and event handling from Feathers service
   as well as manipulating data for display in the UI
@@ -11,6 +11,7 @@
 
 // Libs
 import Vue from 'vue'
+import Debug from 'debug'
 
 // Constants & Interfaces
 import {
@@ -67,6 +68,7 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
   data() {
     return {
+      debug: null,
       fService: null,
       data: {}, // Feathers records
       path: '',
@@ -89,6 +91,9 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
   },
 
   methods: {
+    /*
+      Feathers CRUD & data
+    */
     createRecord(record: DataRecord) {
       const { fService } = this
 
@@ -101,6 +106,11 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
       if (!fService) return Promise.reject('no fService')
       return fService.updateRecord(id, record)
+    },
+
+    getRecordById(id: string) {
+      const { data } = this
+      return data[id] || null
     },
 
     removeSelectedRecords() {
@@ -139,15 +149,11 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
       this.fields = unpackPropertyTypeStruct(packedfields)
     },
 
-    getRecordById(id: string) {
-      const { data } = this
-      return data[id] || null
-    },
-
     _createFeathersService() {
-      const { fServer, path } = this
+      const { fServer, path, debug } = this
+      debug && debug('created feathers-service')
 
-      const fService = createService(fServer, path)
+      const fService = createService({ fServer, path })
 
       fService.addLoadedEventListener(this._handleLoadedEvent)
       fService.addCreatedEventListener(this._handleCreatedEvent)
@@ -231,12 +237,20 @@ export const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
     _ctor(props: Service) {
       const { path, fields } = props
+      this.debug = Debug(`service:${path}`)
 
       this.path = path
       this.fields = fields
 
       this._createFeathersService()
       this.isInitialized = true
+    },
+
+    _dtor() {
+      this.isInitialized = false
+      this._destroyFeathersService()
+      this.path = ''
+      this.fields = []
     },
   },
 
@@ -267,5 +281,6 @@ export const create = function (
 }
 
 export const destroy = function (instance: IService): void {
+  instance._dtor()
   instance.$destroy()
 }

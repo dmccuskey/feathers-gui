@@ -112,6 +112,7 @@ export interface IData {
 
   debug: debug.IDebugger | null
   socket: SocketIOClient.Socket | null
+  client: Application<any> | null
   stateMachine: any | null
   errorCount: number
   // callbacks attached to our Feathers Service
@@ -194,8 +195,10 @@ export interface IMethods {
   _handleSocketConnectError(): void
   _handleSocketDisconnect(): void
   _setupSocketListeners(socket: SocketIOClient.Socket): void
+  _createStateMachine(): void
 
   _ctor(props: CreateFeathersServerProps): void
+  _dtor(): void
 }
 
 export type IFeathersServer = Vue & IData & IMethods & IComputed & IProps

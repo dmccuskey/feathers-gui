@@ -21,8 +21,8 @@ const state: State = {
   currentRecordId: null,
 
   // active objects
-  serverInstance: null,
-  serviceInstances: {},
+  serverInstance: null, // AppCtrl
+  serviceInstances: {}, // Server
 }
 
 const plugins: Array<Plugin<State>> = [

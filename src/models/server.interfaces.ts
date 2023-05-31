@@ -33,6 +33,7 @@ export interface IProps {
 }
 
 export interface IData {
+  debug: debug.IDebugger | null
   fServer: IFeathersServer | null
   url: string
   name: string
@@ -58,6 +59,7 @@ export interface IMethods {
   _saveServerChanges(): void
 
   _ctor(props: Server): void
+  _dtor(): void
 }
 
 export type IServer = Vue & IData & IMethods & IComputed & IProps

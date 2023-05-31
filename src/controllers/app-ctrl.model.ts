@@ -172,7 +172,7 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
       const { currentServiceId } = this
 
       if (currentServiceId === id) {
-        store.commit(Mutations.SET_SERVICE_ID, null)
+        this.setCurrentServiceId(null)
       }
       store.commit(Mutations.REMOVE_SERVICE, id)
     },
@@ -371,7 +371,10 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
       if (serverInstance) destroyServer(serverInstance)
       this._setCurrentServer(null)
+      // remove any IDs for this server
       this._setCurrentServerId(null)
+      this.setCurrentServiceId(null)
+      this.setCurrentRecordId(null)
     },
 
     // load server data from data store & create instances
@@ -385,12 +388,6 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
 
     _ctor() {
       this._initializeServer()
-    },
-  },
-
-  watch: {
-    serviceInstances(nV) {
-      console.log('serviceInstances', nV)
     },
   },
 })

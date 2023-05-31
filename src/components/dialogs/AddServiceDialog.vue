@@ -1,7 +1,7 @@
 <template>
   <el-dialog id="add-service-dialog" title="Add a New Service" :visible="true">
     <el-form v-model="addServiceForm">
-      <el-form-item label="Enter Service Path:">
+      <el-form-item label="Enter Service Name:">
         <el-input v-model="addServiceForm.path" />
       </el-form-item>
     </el-form>
