@@ -53,6 +53,12 @@ const handleCatch = () => {
 const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
   name: 'app-ctrl-model',
 
+  data() {
+    return {
+      isInitialized: false,
+    }
+  },
+
   computed: {
     hostname() {
       return window.location.hostname
@@ -61,6 +67,14 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
     usingFeathersGui() {
       const { hostname } = this
       return hostname.includes(fGuiHostname)
+    },
+
+    currentServiceId() {
+      return store.state.currentServiceId
+    },
+
+    currentRecordId() {
+      return store.state.currentRecordId
     },
 
     currentServerId() {
@@ -72,10 +86,6 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
       if (!currentServerId) return null
       const { servers } = store.state
       return servers[currentServerId] || null
-    },
-
-    currentServiceId() {
-      return store.state.currentServiceId
     },
 
     serverInstance() {
@@ -232,12 +242,24 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
       //
       const addNewService = (props: ServiceProps) => {
         this.addService(props)
+        return props
+      }
+
+      const autoSelectService = (props: ServiceProps) => {
+        const d = new Deferred<ServiceProps>()
+        setTimeout(() => {
+          this._autoSelectFirstService()
+          d.resolve(props)
+          // wait for Store to update
+        }, 10)
+        return d.promise
       }
 
       // promise-chain
       deferred.promise
         .then(createServiceProps)
         .then(addNewService)
+        .then(autoSelectService)
         .catch(handleCatch)
 
       return deferred.promise
@@ -318,10 +340,6 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
       return deferred.promise
     },
 
-    _requestDialog(event: DialogEvent) {
-      this.$emit(Event.DISPLAY_DIALOG, event)
-    },
-
     showAddEditServerDialog(record?: Server) {
       const deferred = new Deferred<AddEditServerDialogResultProps>()
 
@@ -347,10 +365,30 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
         } else {
           this.addServer(props)
         }
+        return result
+      }
+
+      const autoSelectServer = (result: AddEditServerDialogResultProps) => {
+        const { id } = result
+
+        const d = new Deferred<AddEditServerDialogResultProps>()
+        if (id) {
+          d.resolve(result)
+        } else {
+          setTimeout(() => {
+            this._autoSelectFirstServer()
+            d.resolve(result)
+            // wait for Store to update
+          }, 10)
+        }
+        return d.promise
       }
 
       // promise-chain
-      deferred.promise.then(handleResponse).catch(handleCatch)
+      deferred.promise
+        .then(handleResponse)
+        .then(autoSelectServer)
+        .catch(handleCatch)
 
       return deferred.promise
     },
@@ -358,6 +396,10 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
     /*
       private methods
     */
+
+    _requestDialog(event: DialogEvent) {
+      this.$emit(Event.DISPLAY_DIALOG, event)
+    },
 
     _setCurrentServerId(id: string | null) {
       store.commit(Mutations.SET_SERVER_ID, id)
@@ -375,6 +417,24 @@ const ObjectClass = Vue.extend<IData, IMethods, IComputed, IProps>({
       this._setCurrentServerId(null)
       this.setCurrentServiceId(null)
       this.setCurrentRecordId(null)
+    },
+
+    _autoSelectFirstServer() {
+      const { serversList } = this
+
+      if (serversList.length == 1) {
+        const server = serversList[0]
+        this.activateServerById(server.id)
+      }
+    },
+
+    _autoSelectFirstService() {
+      const { serviceInstanceList } = this
+
+      if (serviceInstanceList.length == 1) {
+        const service = serviceInstanceList[0]
+        this.setCurrentServiceId(service.id)
+      }
     },
 
     // load server data from data store & create instances

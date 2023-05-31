@@ -4,11 +4,16 @@
       <side-bar />
     </el-col>
     <el-col :span="12">
-      <template v-if="haveCurrentService">
-        <service-viewer :serviceInstance="currentServiceInstance" />
+      <template v-if="!isReady">
+        <empty-config :noServers="!haveServers" :noServices="!haveServices" />
       </template>
       <template v-else>
-        <div style="padding-top: 10px">No Service Selected</div>
+        <template v-if="!haveCurrentService">
+          <div style="padding-top: 10px">No Service Selected</div>
+        </template>
+        <template v-else>
+          <service-viewer :serviceInstance="currentServiceInstance" />
+        </template>
       </template>
     </el-col>
     <el-col :span="6">
@@ -38,7 +43,10 @@ import { IService } from '@/models/service.interfaces'
 import RecordInspector from './RecordInspector.vue'
 import ServiceViewer from './ServiceViewer.vue'
 import SideBar from './SideBar.vue'
-import store from '@/store'
+import EmptyConfig from './EmptyConfig.vue'
+
+// Controllers & Services
+import AppCtrl from '@/controllers/app-ctrl.model'
 
 /*
   Vuejs Interfaces
@@ -56,6 +64,9 @@ interface IComputed {
   currentServiceInstance: IService | null
   haveCurrentService: boolean
   haveCurrentRecordId: boolean
+  haveServers: boolean
+  haveServices: boolean
+  isReady: boolean
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
@@ -68,22 +79,28 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
     RecordInspector,
     ServiceViewer,
     SideBar,
+    EmptyConfig,
   },
 
   computed: {
+    isReady() {
+      const { haveServers, haveServices } = this
+      return haveServers && haveServices
+    },
+
     currentServiceId() {
-      return store.state.currentServiceId
+      return AppCtrl.currentServiceId
     },
 
     currentRecordId() {
-      return store.state.currentRecordId
+      return AppCtrl.currentRecordId
     },
 
     currentServiceInstance(): IService | null {
-      const { serviceInstances } = store.state
+      const { serviceInstanceList } = AppCtrl
       const { currentServiceId } = this
 
-      const instance = Object.values(serviceInstances).find(
+      const instance = serviceInstanceList.find(
         (item) => item.id === currentServiceId
       )
 
@@ -98,6 +115,14 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
     haveCurrentRecordId() {
       const { currentRecordId } = this
       return currentRecordId !== null
+    },
+
+    haveServices() {
+      return AppCtrl.serviceInstanceList.length > 0
+    },
+
+    haveServers() {
+      return AppCtrl.serversList.length > 0
     },
   },
 })

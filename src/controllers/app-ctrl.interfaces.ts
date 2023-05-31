@@ -53,23 +53,21 @@ export interface IProps {}
 
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface IData {
-  // filtersValue: DataRecord[]
-  // pathValue: string
+  isInitialized: boolean
 }
 // eslint-disable-next-line @typescript-eslint/no-empty-interface
 export interface IComputed {
-  // fields: ServiceFields[]
-  // serverId: string
+  hostname: string
+  usingFeathersGui: boolean
+  currentRecordId: string | null
+  currentServerId: string | null
+  currentServiceId: string | null
   serversList: Server[]
   serverConfigs: ServerHash
-  currentServerId: string | null
   currentServerConfig: Server | null
-  currentServiceId: string | null
   serverInstance: IServer | null
   serviceInstances: IServiceHash
   serviceInstanceList: IService[]
-  hostname: string
-  usingFeathersGui: boolean
 }
 
 export interface IMethods {
@@ -107,6 +105,10 @@ export interface IMethods {
   _setCurrentServer(instance: IServer | null): void
 
   _destroyCurrentIServer(): void
+
+  _autoSelectFirstServer(): void
+  _autoSelectFirstService(): void
+
   _initializeServer(): void
   _ctor(): void
 }

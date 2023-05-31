@@ -118,10 +118,15 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
     },
   },
 
+  watch: {
+    currentServerId(nV) {
+      this.selectedServerId = nV || ''
+    },
+  },
+
   mounted() {
     const { currentServerId } = this
     this.selectedServerId = currentServerId || ''
-    // this.selectedServerId = '' // TEST
   },
 })
 </script>
