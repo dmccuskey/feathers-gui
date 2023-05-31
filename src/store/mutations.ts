@@ -17,19 +17,19 @@ const LogPrefix = '[store.mutations]'
 
 // keys used to identify mutations
 export const Mutations = {
-  // server mutations
+  // server record mutations
   ADD_SERVER: 'addServer',
   UPDATE_SERVER: 'updateServer',
   REMOVE_SERVER: 'removeServer',
-  // service mutations
+  // service record mutations
   ADD_SERVICE: 'addService',
   REMOVE_SERVICE: 'removeService',
   UPDATE_SERVICE: 'updateService',
-  // current server instance mutations
+  // current id mutations
   SET_SERVER_ID: 'setCurrentServerId',
   SET_SERVICE_ID: 'setCurrentServiceId',
   SET_RECORD_ID: 'setCurrentRecordId',
-  // current service instance mutations
+  // current instance mutations
   SET_SERVER_INSTANCE: 'setServerInstance',
   ADD_SERVICE_INSTANCE: 'addServiceInstance',
   REMOVE_SERVICE_INSTANCE: 'removeServiceInstance',
