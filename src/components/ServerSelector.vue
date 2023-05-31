@@ -40,7 +40,6 @@ import { Server } from '@/models/server.interfaces'
 
 // Controllers & Services
 import AppCtrl from '@/controllers/app-ctrl.model'
-import store from '@/store'
 
 interface SelectOption {
   value: string
@@ -80,7 +79,7 @@ export default Vue.extend<IData, IMethods, IComputed, IProps>({
 
   computed: {
     currentServerId() {
-      return store.state.currentServerId
+      return AppCtrl.currentServerId
     },
 
     serversList() {
