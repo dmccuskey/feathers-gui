@@ -14,10 +14,10 @@ This can be used either locally or online.
 
 - Support for multiple Servers and Services
 - Real-time data updates
-- Basic auth supported, ie. strategy `local`
-- All configuration info is stored locally in `localStorage`
 - Custom display for each data column
+- All configuration info is stored locally in `localStorage`
 - Offers a template when adding new records to a Service
+- Basic auth supported, ie. strategy `local`
 
 ## Setup
 
