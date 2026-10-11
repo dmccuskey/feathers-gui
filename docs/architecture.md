@@ -164,7 +164,9 @@ A change to one field is sent as a `patch` of that field's top-level property, n
 
 ## The Interface
 
-The widgets are the app's own: a button, an input, a select, a checkbox, a dialog, a table and a tree ([ADR 009](decisions/009-our-own-widgets.md)). Two have real behavior: the table, which draws only the rows in view, and the tree, which shows a record and edits a value in place.
+The widgets are the app's own: a button, an input, a select, a checkbox, a field, a dialog, a table and a tree ([ADR 009](decisions/009-our-own-widgets.md)). They are in `src/widgets/`, and every one of them is shown, in every state, on a page of the app at `#/widgets`.
+
+A widget names a role (`--ui-accent`), never a color, and a theme says what each of the twelve roles is. A theme is three seeds, from which its other roles are derived, and a test checks that what it makes can be read ([ADR 011](decisions/011-themes-from-seeds.md)). There is a light theme and a dark one; the app follows the system's setting until the user picks. Two have real behavior: the table, which draws only the rows in view, and the tree, which shows a record and edits a value in place.
 
 The page is mounted at once and renders from state. It never waits for a connection.
 
@@ -182,3 +184,4 @@ The page is mounted at once and renders from state. It never waits for a connect
 | [008](decisions/008-passwords-in-memory.md) | A password stays in memory |
 | [009](decisions/009-our-own-widgets.md) | The widgets are the app's own |
 | [010](decisions/010-versions-as-branches.md) | Versions are branches, and the app has a version number of its own |
+| [011](decisions/011-themes-from-seeds.md) | A theme is a few seeds, and the widgets name roles |
