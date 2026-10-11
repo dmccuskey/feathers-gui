@@ -49,6 +49,21 @@ _The port number can be changed in `vue.config.js`._
 
 Documentation at [FeathersGui.dev](https://feathersgui.dev)
 
+### The New Version
+
+A new version for Feathersjs v5 is being built in `app/`, on Vue 3, Vite and [Bun](https://bun.sh). It is a skeleton for now: use `fgui-v4` until it replaces it. The design is in [docs/](docs/README.md).
+
+Run these from `app/`:
+
+| command | does |
+| --- | --- |
+| `bun install` | installs the dependencies |
+| `bun run dev` | serves the app at [http://localhost:9093](http://localhost:9093). `PORT` changes the port |
+| `bun run build` | builds the app into `dist/` |
+| `bun test` | runs the tests |
+| `bun run typecheck` | checks the types, in `.ts` and `.vue` files |
+| `bun run lint` | checks the formatting. `bun run format` fixes it |
+
 ### Online Use
 
 The online docs and GUI versions are hosted at Netlify. They use secure HTTPS, so the Feathers server has to serve SSL as well.
