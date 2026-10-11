@@ -10,9 +10,9 @@ Two parts of the new interface have real behavior, and a general library would n
 
 ## Decision
 
-- The app has seven widgets of its own: a button, an input, a select, a checkbox, a dialog, a table and a tree.
-- They are a folder in the app (`src/widgets/`), not a package. They move out only if a second project wants them.
-- The first five are thin: native elements, styled, with the keyboard and focus behavior a native element already has.
+- The app has eight widgets of its own: a button, an input, a select, a checkbox, a field (a label with its control, and a line for a hint or an error), a dialog, a table and a tree.
+- They are a folder in the app (`src/widgets/`), not a package. They move out only if a second project wants them, and are written so that moving them is only a move: the folder takes nothing from the app, has one entry file (`index.ts`), and names its CSS classes and variables with one prefix (`ui-`).
+- The first six are thin: native elements, styled, with the keyboard and focus behavior a native element already has.
 - The table and the tree are written for this app's two jobs.
 
 ## Consequences
