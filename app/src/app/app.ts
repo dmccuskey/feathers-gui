@@ -5,10 +5,53 @@ import { effectScope, inject, shallowRef, watch, type InjectionKey } from 'vue'
 import { Dialogs } from './dialogs.ts'
 import { Secrets } from './secrets.ts'
 import { Session, type SessionParts } from './session.ts'
-import { Setup, type ServerSetup, type SetupOptions } from './setup.ts'
+import {
+    Setup,
+    SetupBlockedError,
+    SetupImportError,
+    type ServerSetup,
+    type ServiceSetup,
+    type SetupOptions,
+} from './setup.ts'
 
-/** The app's kinds of dialog. None yet: each is added here with the dialog that is built. */
-export type AppDialogs = {}
+/** The app's kinds of dialog: each is added here with the dialog that is built. */
+export type AppDialogs = {
+    info: { input: null; answer: null }
+    ask: { input: Question; answer: string }
+    servers: { input: null; answer: null }
+    server: { input: ServerDialogInput; answer: ServerDialogAnswer }
+    service: { input: ServiceDialogInput; answer: ServiceDialogAnswer }
+}
+
+/** A question with a button for each answer. The first button is where the focus starts. */
+export interface Question {
+    title: string
+    text: string
+    choices: readonly { value: string; label: string; variant?: 'plain' | 'primary' | 'danger' }[]
+}
+
+export interface ServerDialogInput {
+    /** The server to edit. Unset: a new one. */
+    server?: ServerSetup
+    /** Whether a password or a token is in hand for it, so that none has to be typed. */
+    hasSecret: boolean
+}
+
+export interface ServerDialogAnswer {
+    /** Without a password: that is `secret`. */
+    server: Omit<ServerSetup, 'id'>
+    /** The password or the token typed. `null`: none was typed, and the one in hand stays. */
+    secret: string | null
+}
+
+export interface ServiceDialogInput {
+    /** The service to edit. Unset: a new one. */
+    service?: ServiceSetup
+    /** The paths of the server's other services: none is set up twice. */
+    taken: readonly string[]
+}
+
+export type ServiceDialogAnswer = Pick<ServiceSetup, 'path' | 'load'>
 
 export interface AppOptions {
     /** Where the setup is kept. Default: the browser's storage. */
@@ -73,6 +116,162 @@ export class App {
         this.setup.currentServerId = null
     }
 
+    /** Shows what the app is. */
+    async showInfo(): Promise<void> {
+        await this.dialogs.show('info', null)
+    }
+
+    /** Shows the servers, with what adds, edits and removes one, and the export and import of the setup. */
+    async manageServers(): Promise<void> {
+        await this.dialogs.show('servers', null)
+    }
+
+    /** Asks for a new server and adds it. The first server is made the current one. */
+    async addServer(): Promise<void> {
+        const answer = await this.dialogs.show('server', { hasSecret: false })
+
+        if (!answer) return
+
+        await this.#write(() => {
+            const server = this.setup.addServer(withSecret(answer.server, answer.secret))
+
+            this.#keepSecret(server.id, answer.server, answer.secret)
+
+            if (this.setup.currentServerId === null) this.activateServer(server.id)
+        })
+    }
+
+    /** Asks for the changes to a server and makes them. The session with it starts again when they touch it. */
+    async editServer(serverId: string): Promise<void> {
+        const before = this.setup.server(serverId)
+
+        if (!before) return
+
+        const held = before.login?.password ?? this.secrets.get(serverId)
+        const answer = await this.dialogs.show('server', { server: before, hasSecret: held !== undefined })
+
+        if (!answer) return
+
+        // What was in hand stays for the same kind of login, and is nothing to another.
+        const kept = before.login?.kind === answer.server.login?.kind ? (held ?? null) : null
+        const secret = answer.secret ?? kept
+
+        await this.#write(() => {
+            this.setup.updateServer(serverId, { login: undefined, ...withSecret(answer.server, secret) })
+            this.#keepSecret(serverId, answer.server, secret)
+
+            const after = this.setup.server(serverId)
+            const same = after?.url === before.url && JSON.stringify(after.login) === JSON.stringify(before.login)
+
+            if (!same && this.setup.currentServerId === serverId) this.activateServer(serverId)
+        })
+    }
+
+    /** Removes a server and its services, once the user has agreed. */
+    async removeServer(serverId: string): Promise<void> {
+        const server = this.setup.server(serverId)
+
+        if (!server) return
+
+        const count = this.setup.servicesOf(serverId).length
+        const services = count === 0 ? '' : count === 1 ? ' and its service' : ` and its ${count} services`
+        const answer = await this.dialogs.show('ask', {
+            title: 'Remove the server?',
+            text: `"${server.name || server.url}"${services} will be removed from the setup. Nothing changes on the server.`,
+            choices: [
+                { value: 'cancel', label: 'Cancel' },
+                { value: 'remove', label: 'Remove', variant: 'danger' },
+            ],
+        })
+
+        if (answer !== 'remove') return
+
+        await this.#write(() => {
+            if (this.setup.currentServerId === serverId) this.deactivate()
+
+            this.setup.removeServer(serverId)
+        })
+    }
+
+    /** Asks for a new service of the current server and adds it. The first service is made the current one. */
+    async addService(): Promise<void> {
+        const serverId = this.setup.currentServerId
+
+        if (serverId === null) return
+
+        const taken = this.setup.servicesOf(serverId).map(service => service.path)
+        const answer = await this.dialogs.show('service', { taken })
+
+        if (!answer) return
+
+        await this.#write(() => {
+            const service = this.setup.addService({ serverId, ...answer, fields: [], pins: [] })
+
+            if (this.setup.currentServiceId(serverId) === null) this.setup.setCurrentService(serverId, service.id)
+        })
+    }
+
+    /** Asks for the changes to a service and makes them. */
+    async editService(serviceId: string): Promise<void> {
+        const service = this.setup.service(serviceId)
+
+        if (!service) return
+
+        const taken = this.setup
+            .servicesOf(service.serverId)
+            .filter(other => other.id !== serviceId)
+            .map(other => other.path)
+        const answer = await this.dialogs.show('service', { service, taken })
+
+        if (answer) await this.#write(() => this.setup.updateService(serviceId, answer))
+    }
+
+    /** Removes a service, once the user has agreed. */
+    async removeService(serviceId: string): Promise<void> {
+        const service = this.setup.service(serviceId)
+
+        if (!service) return
+
+        const answer = await this.dialogs.show('ask', {
+            title: 'Remove the service?',
+            text: `"${service.path}" will be removed from the setup, with its fields and pins. Nothing changes on the server.`,
+            choices: [
+                { value: 'cancel', label: 'Cancel' },
+                { value: 'remove', label: 'Remove', variant: 'danger' },
+            ],
+        })
+
+        if (answer === 'remove') await this.#write(() => this.setup.removeService(serviceId))
+    }
+
+    /** Takes in an exported setup, once the user has said how. */
+    async importSetup(json: string): Promise<void> {
+        const empty = this.setup.servers.length === 0
+        const how = empty
+            ? 'replace'
+            : await this.dialogs.show('ask', {
+                  title: 'Import the setup',
+                  text: 'Add the servers and services of the file to those set up here, or put the file in place of them?',
+                  choices: [
+                      { value: 'cancel', label: 'Cancel' },
+                      { value: 'replace', label: 'Replace', variant: 'danger' },
+                      { value: 'merge', label: 'Add' },
+                  ],
+              })
+
+        if (how !== 'merge' && how !== 'replace') return
+
+        await this.#write(() => {
+            this.setup.import(json, how)
+
+            // The current server may be gone, or have changed under its session.
+            const serverId = this.setup.currentServerId
+
+            if (serverId === null) this.#endSession()
+            else this.activateServer(serverId)
+        })
+    }
+
     /** Ends the session and everything the app owns. What is current stays, for the next start. */
     destroy(): void {
         this.#scope.stop()
@@ -82,12 +281,40 @@ export class App {
         this.setup.destroy()
     }
 
+    /** Makes a change to the setup, and says so when the setup refuses it. */
+    async #write(change: () => void): Promise<void> {
+        try {
+            change()
+        } catch (error) {
+            if (!(error instanceof SetupBlockedError) && !(error instanceof SetupImportError)) throw error
+
+            await this.dialogs.show('ask', {
+                title: 'The setup was not changed',
+                text: error.message,
+                choices: [{ value: 'ok', label: 'OK', variant: 'primary' }],
+            })
+        }
+    }
+
+    /** A secret that is not remembered is held here, in memory. One that is remembered is in the setup. */
+    #keepSecret(serverId: string, server: Omit<ServerSetup, 'id'>, secret: string | null): void {
+        if (server.login && !server.login.remember && secret !== null) this.secrets.set(serverId, secret)
+        else this.secrets.forget(serverId)
+    }
+
     #endSession(): void {
         const session = this.#session.value
 
         this.#session.value = null
         session?.destroy()
     }
+}
+
+/** The server with its secret as the remembered password, when it has a login that remembers. */
+function withSecret(server: Omit<ServerSetup, 'id'>, secret: string | null): Omit<ServerSetup, 'id'> {
+    return server.login?.remember && secret !== null
+        ? { ...server, login: { ...server.login, password: secret } }
+        : server
 }
 
 /** Makes the app, and activates the server that was current in this window last time, if there is one. */

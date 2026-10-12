@@ -13,7 +13,8 @@ Against that: this is a tool for development, used many times a day, and a tool 
 - **A password is kept in memory only,** by the app, for as long as the window is open. Going to another server and back does not ask again.
 - **"Remember" is a choice per server.** With it on, the password itself is kept with the server's setup in `localStorage`, and the dialog says that it is stored as plain text. It is off unless the user turns it on.
 - **Windows share what they hold in memory:** a new window asks the open ones for a server's password, over a channel of the browser's for pages of the same origin. Nothing is written anywhere.
-- **The access token is never stored.** It stays inside the connection, in memory, and each connection has its own.
+- **The access token a login returns is never stored.** It stays inside the connection, in memory, and each connection has its own.
+- **A pasted access token is kept as a password is:** in memory, or with the server's setup when "remember" is on for it. It is the user's only way in to such a server, and nobody should have to write a token down to paste it again.
 - **The logins offered** are the `local` strategy, with the names of its two fields settable per server, and a pasted access token for a server that logs in another way.
 - **When a login is lost** (the token ran out, or the server refused it), the session logs in again with the password it can get, and asks for it when it has none.
 - **An exported setup has no passwords.**

@@ -1,6 +1,6 @@
 // The secrets typed in this window, by server: the password of a server's login, or the access token pasted for
 // it. They are held in memory only, so that going to another server and back does not ask again, and they end
-// with the window (ADR 008). A password that the user chose to have remembered is in the server's setup, not here.
+// with the window (ADR 008). One that the user chose to have remembered is in the server's setup, not here.
 
 export class Secrets {
     readonly #secrets = new Map<string, string>()
