@@ -12,6 +12,7 @@
         "format": "bun --bun prettier --write ."
     },
     "dependencies": {
+        "@dmccuskey/feathers-connect": "link:feathers-connect",
         "vue": "^3.5.43"
     },
     "devDependencies": {

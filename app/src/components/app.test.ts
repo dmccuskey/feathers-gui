@@ -1,14 +1,15 @@
 import { expect, test } from 'bun:test'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { FakeBrowser, FakeStorage } from '../../test-support/fake-browser.ts'
+import { fakeSessions, type FakeConnectionOptions } from '../../test-support/fake-connection.ts'
 import { APP_KEY, App as GuiApp } from '../app/app.ts'
 import type { ServerSetup, ServiceSetup } from '../app/setup.ts'
 import { THEMING_KEY, Theming } from '../widgets/index.ts'
 import App from './App.vue'
 
-function mountApp() {
-    const app = new GuiApp({ storage: new FakeBrowser().open() })
+function mountApp(connection: FakeConnectionOptions = {}) {
+    const app = new GuiApp({ storage: new FakeBrowser().open(), makeSession: fakeSessions(connection) })
     const theming = new Theming({
         root: document.createElement('div'),
         dark: Object.assign(new EventTarget(), { matches: false }),
@@ -88,9 +89,43 @@ test('the services of the current server are listed by path, and choosing one sh
     expect(wrapper.find('.service-area-path').text()).toBe('things')
 })
 
+test('the records of the current service are listed as the server has them', async () => {
+    const { app, wrapper } = mountApp({ services: { things: [{ _id: 'a', name: 'first' }] } })
+    const server = addServer(app, 'local')
+
+    app.activateServer(server.id)
+    app.setup.setCurrentService(server.id, addService(app, server, 'things').id)
+    await flushPromises()
+
+    expect(wrapper.findAll('.service-area-records li').map(item => item.text())).toEqual(['{"_id":"a","name":"first"}'])
+})
+
+test('a service the server refuses shows the reason', async () => {
+    const { app, wrapper } = mountApp()
+    const server = addServer(app, 'local')
+
+    app.activateServer(server.id)
+    app.setup.setCurrentService(server.id, addService(app, server, 'nothing').id)
+    await flushPromises()
+
+    expect(wrapper.find('.service-area-notice').text()).toBe('Service not found: nothing')
+    expect(wrapper.find('.service-area-records').exists()).toBe(false)
+})
+
+test('a server that cannot be reached shows the reason', async () => {
+    const { app, wrapper } = mountApp({ error: new Error('Could not connect') })
+    const server = addServer(app, 'local')
+
+    app.activateServer(server.id)
+    app.setup.setCurrentService(server.id, addService(app, server, 'things').id)
+    await flushPromises()
+
+    expect(wrapper.find('.service-area-notice').text()).toBe('Could not connect')
+})
+
 test('a setup that cannot be used is said', async () => {
     const browser = new FakeBrowser()
-    const app = new GuiApp({ storage: browser.open() })
+    const app = new GuiApp({ storage: browser.open(), makeSession: fakeSessions() })
 
     browser.local.setItem('feathers-gui.setup', 'not a setup')
 

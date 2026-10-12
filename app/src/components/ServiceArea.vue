@@ -1,7 +1,9 @@
 <script setup lang="ts">
-// The area of the current service. Until there is one, it says what is missing and offers the way to it.
-import { computed } from 'vue'
+// The area of the current service. Until there is one, it says what is missing and offers the way to it. Of the
+// service it shows a first page of records as they are, until there is a service view.
+import { computed, shallowRef, watch } from 'vue'
 import { useApp } from '../app/app.ts'
+import type { RecordEnvelope } from '../app/session.ts'
 import { UiButton } from '../widgets/index.ts'
 
 const app = useApp()
@@ -14,6 +16,32 @@ const service = computed(() => {
 
     return id === null ? undefined : setup.service(id)
 })
+
+const status = computed(() => app.session?.status)
+const records = shallowRef<readonly RecordEnvelope[] | null>(null)
+const failure = shallowRef<string | null>(null)
+
+watch(
+    () => [app.session, status.value?.phase, service.value?.path] as const,
+    async ([session, phase, path], _before, onCleanup) => {
+        let current = true
+
+        onCleanup(() => (current = false))
+        records.value = null
+        failure.value = null
+
+        if (!session || phase !== 'ready' || path === undefined) return
+
+        try {
+            const page = await session.firstPage(path)
+
+            if (current) records.value = page
+        } catch (error) {
+            if (current) failure.value = error instanceof Error ? error.message : String(error)
+        }
+    },
+    { immediate: true },
+)
 </script>
 
 <template>
@@ -40,7 +68,17 @@ const service = computed(() => {
             <p>No service is chosen. Choose one in the side bar.</p>
         </div>
         <!-- The service view comes here. -->
-        <h2 v-else class="service-area-path">{{ service.path }}</h2>
+        <template v-else>
+            <h2 class="service-area-path">{{ service.path }}</h2>
+            <p v-if="status?.error" class="service-area-notice" role="alert">{{ status.error }}</p>
+            <p v-else-if="failure" class="service-area-notice" role="alert">{{ failure }}</p>
+            <p v-else-if="status?.phase === 'connecting'" class="service-area-status">Connecting…</p>
+            <p v-else-if="!records" class="service-area-status">Loading…</p>
+            <p v-else-if="records.length === 0" class="service-area-status">No records.</p>
+            <ol v-else class="service-area-records">
+                <li v-for="record in records" :key="record.id">{{ JSON.stringify(record.raw) }}</li>
+            </ol>
+        </template>
     </section>
 </template>
 
@@ -80,5 +118,27 @@ const service = computed(() => {
     font-family: var(--ui-mono);
     font-size: 1.15em;
     font-weight: 600;
+}
+
+.service-area-path + .service-area-notice {
+    margin-top: calc(var(--ui-space) * 2);
+}
+
+.service-area-status {
+    color: var(--ui-muted);
+}
+
+.service-area-records {
+    margin: calc(var(--ui-space) * 2) 0 0;
+    padding: 0;
+    list-style: none;
+    font-family: var(--ui-mono);
+    font-size: 0.9em;
+}
+
+.service-area-records li {
+    padding: calc(var(--ui-space) * 0.5) 0;
+    border-bottom: 1px solid var(--ui-border);
+    overflow-wrap: anywhere;
 }
 </style>

@@ -2,35 +2,50 @@ import { expect, test } from 'bun:test'
 import { mount } from '@vue/test-utils'
 import { defineComponent, h, watch } from 'vue'
 import { FakeBrowser, type FakeWindow } from '../../test-support/fake-browser.ts'
+import { fakeConnection, fakeSessions } from '../../test-support/fake-connection.ts'
 import { APP_KEY, App, createGuiApp, useApp, type AppOptions } from './app.ts'
-import type { Session } from './session.ts'
+import { Session, type SessionParts } from './session.ts'
 import { Setup, type ServerSetup } from './setup.ts'
 
 const SERVER: Omit<ServerSetup, 'id'> = { name: 'Local', url: 'http://localhost:3041', readOnly: false }
 
+/** A session that records what the app does with it, and connects to nothing. */
+class LoggedSession extends Session {
+    readonly #note: (what: string) => void
+
+    constructor(server: ServerSetup, parts: SessionParts, log: string[]) {
+        super(server, { ...parts, makeConnection: () => fakeConnection() })
+        this.#note = what => void log.push(`${what} ${server.name}`)
+    }
+
+    override async open(): Promise<void> {
+        this.#note('open')
+    }
+
+    override destroy(): void {
+        this.#note('destroy')
+    }
+}
+
 /** Records the sessions the app makes, and what it does with each. */
-function fakeSessions(window: FakeWindow): { options: AppOptions; log: string[] } {
+function loggedSessions(window: FakeWindow): { options: AppOptions; log: string[] } {
     const log: string[] = []
 
     return {
         log,
         options: {
             storage: window,
-            makeSession: (server): Session => {
+            makeSession: (server, parts) => {
                 log.push(`make ${server.name}`)
 
-                return {
-                    serverId: server.id,
-                    open: async () => void log.push(`open ${server.name}`),
-                    destroy: () => void log.push(`destroy ${server.name}`),
-                }
+                return new LoggedSession(server, parts, log)
             },
         },
     }
 }
 
 test('a new app has its parts, and no session', () => {
-    const app = new App({ storage: new FakeBrowser().open() })
+    const app = new App({ storage: new FakeBrowser().open(), makeSession: fakeSessions() })
 
     expect(app.setup.servers).toEqual([])
     expect(app.dialogs.open).toEqual([])
@@ -39,7 +54,7 @@ test('a new app has its parts, and no session', () => {
 })
 
 test('activating a server makes its session, opens it, and makes the server current', () => {
-    const { options, log } = fakeSessions(new FakeBrowser().open())
+    const { options, log } = loggedSessions(new FakeBrowser().open())
     const app = new App(options)
     const server = app.setup.addServer(SERVER)
 
@@ -58,7 +73,7 @@ test('the session is given the setup and the secrets of the app', () => {
         makeSession: (server, given) => {
             parts.push(given)
 
-            return { serverId: server.id, open: async () => {}, destroy: () => {} }
+            return new LoggedSession(server, given, [])
         },
     })
 
@@ -68,7 +83,7 @@ test('the session is given the setup and the secrets of the app', () => {
 })
 
 test('activating another server ends the session there is first', () => {
-    const { options, log } = fakeSessions(new FakeBrowser().open())
+    const { options, log } = loggedSessions(new FakeBrowser().open())
     const app = new App(options)
     const local = app.setup.addServer(SERVER)
     const other = app.setup.addServer({ ...SERVER, name: 'Other' })
@@ -81,7 +96,7 @@ test('activating another server ends the session there is first', () => {
 })
 
 test('a server that is not set up is not activated, and the session there is stays', () => {
-    const { options, log } = fakeSessions(new FakeBrowser().open())
+    const { options, log } = loggedSessions(new FakeBrowser().open())
     const app = new App(options)
     const server = app.setup.addServer(SERVER)
     app.activateServer(server.id)
@@ -92,7 +107,7 @@ test('a server that is not set up is not activated, and the session there is sta
 })
 
 test('deactivate() ends the session, and no server is current', () => {
-    const { options, log } = fakeSessions(new FakeBrowser().open())
+    const { options, log } = loggedSessions(new FakeBrowser().open())
     const app = new App(options)
     app.activateServer(app.setup.addServer(SERVER).id)
 
@@ -104,7 +119,7 @@ test('deactivate() ends the session, and no server is current', () => {
 })
 
 test('what reads the session is told when it changes', () => {
-    const { options } = fakeSessions(new FakeBrowser().open())
+    const { options } = loggedSessions(new FakeBrowser().open())
     const app = new App(options)
     const server = app.setup.addServer(SERVER)
     const told: (string | null)[] = []
@@ -121,7 +136,7 @@ test('what reads the session is told when it changes', () => {
 })
 
 test('a secret is kept while going to another server and back', () => {
-    const { options } = fakeSessions(new FakeBrowser().open())
+    const { options } = loggedSessions(new FakeBrowser().open())
     const app = new App(options)
     const local = app.setup.addServer(SERVER)
     const other = app.setup.addServer({ ...SERVER, name: 'Other' })
@@ -136,7 +151,7 @@ test('a secret is kept while going to another server and back', () => {
 
 test('the secret of a server goes when the server is removed, in this window or another', () => {
     const browser = new FakeBrowser()
-    const app = new App({ storage: browser.open() })
+    const app = new App({ storage: browser.open(), makeSession: fakeSessions() })
     const elsewhere = new Setup(browser.open())
     const local = app.setup.addServer(SERVER)
     const other = app.setup.addServer({ ...SERVER, name: 'Other' })
@@ -153,7 +168,7 @@ test('the secret of a server goes when the server is removed, in this window or 
 
 test('destroy() ends the session, the dialogs and the secrets, and keeps what is current', async () => {
     const browser = new FakeBrowser()
-    const { options, log } = fakeSessions(browser.open())
+    const { options, log } = loggedSessions(browser.open())
     const app = new App(options)
     const elsewhere = new Setup(browser.open())
     const server = app.setup.addServer(SERVER)
@@ -179,7 +194,7 @@ test('destroy() ends the session, the dialogs and the secrets, and keeps what is
 })
 
 test('createGuiApp() starts with no session when no server was current', () => {
-    const { options, log } = fakeSessions(new FakeBrowser().open())
+    const { options, log } = loggedSessions(new FakeBrowser().open())
 
     const app = createGuiApp(options)
 
@@ -189,11 +204,11 @@ test('createGuiApp() starts with no session when no server was current', () => {
 
 test('createGuiApp() activates the server that was current in this window', () => {
     const window = new FakeBrowser().open()
-    const before = new App({ storage: window })
+    const before = new App({ storage: window, makeSession: fakeSessions() })
     const server = before.setup.addServer(SERVER)
     before.activateServer(server.id)
     before.destroy()
-    const { options, log } = fakeSessions(window)
+    const { options, log } = loggedSessions(window)
 
     const app = createGuiApp(options)
 
@@ -203,17 +218,17 @@ test('createGuiApp() activates the server that was current in this window', () =
 
 test('createGuiApp() in a new window activates the server used last in any window', () => {
     const browser = new FakeBrowser()
-    const first = new App({ storage: browser.open() })
+    const first = new App({ storage: browser.open(), makeSession: fakeSessions() })
     const server = first.setup.addServer(SERVER)
     first.activateServer(server.id)
 
-    const app = createGuiApp(fakeSessions(browser.open()).options)
+    const app = createGuiApp(loggedSessions(browser.open()).options)
 
     expect(app.session?.serverId).toBe(server.id)
 })
 
 test('useApp() gives a component the app that is provided', () => {
-    const app = new App({ storage: new FakeBrowser().open() })
+    const app = new App({ storage: new FakeBrowser().open(), makeSession: fakeSessions() })
     let found: App | undefined
     const Reader = defineComponent({
         setup() {
@@ -255,7 +270,7 @@ async function answer(app: App, kind: string, value: unknown): Promise<void> {
 }
 
 function flowApp(): { app: App; log: string[] } {
-    const { options, log } = fakeSessions(new FakeBrowser().open())
+    const { options, log } = loggedSessions(new FakeBrowser().open())
 
     return { app: new App(options), log }
 }
@@ -437,7 +452,7 @@ test('a service is added to the current server, the first made current, and edit
 test('an import asks how when something is set up, and says so when the file is no setup', async () => {
     const { app } = flowApp()
     const exported = (() => {
-        const other = new App({ storage: new FakeBrowser().open() })
+        const other = new App({ storage: new FakeBrowser().open(), makeSession: fakeSessions() })
 
         other.setup.addServer({ ...SERVER, name: 'Imported' })
 
