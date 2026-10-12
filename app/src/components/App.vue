@@ -1,15 +1,28 @@
 <script setup lang="ts">
-// The app's frame. Empty for now, but for the dialogs and the page of the widgets: the skeleton only shows that
-// the page builds and serves.
+// The app's frame: the header, the side bar and the area of the current service, and the dialogs over them.
 import { onBeforeUnmount, ref, type Component } from 'vue'
 import { useApp, type AppDialogs } from '../app/app.ts'
+import AppHeader from './AppHeader.vue'
+import AskDialog from './AskDialog.vue'
 import DialogHost from './DialogHost.vue'
+import InfoDialog from './InfoDialog.vue'
+import ServerDialog from './ServerDialog.vue'
+import ServersDialog from './ServersDialog.vue'
+import ServiceArea from './ServiceArea.vue'
+import ServiceDialog from './ServiceDialog.vue'
+import SideBar from './SideBar.vue'
 import WidgetsPage from './WidgetsPage.vue'
 
 const app = useApp()
 
 /** The component of each kind of dialog the app has. */
-const DIALOGS: Record<keyof AppDialogs, Component> = {}
+const DIALOGS: Record<keyof AppDialogs, Component> = {
+    info: InfoDialog,
+    ask: AskDialog,
+    servers: ServersDialog,
+    server: ServerDialog,
+    service: ServiceDialog,
+}
 
 /** The page of the widgets is at this address, and nothing links to it. */
 const WIDGETS_HASH = '#/widgets'
@@ -24,21 +37,32 @@ onBeforeUnmount(() => window.removeEventListener('hashchange', onHashChange))
 </script>
 
 <template>
-    <main class="app">
-        <h1>feathers-gui</h1>
-        <WidgetsPage v-if="hash === WIDGETS_HASH" />
-    </main>
+    <div class="app">
+        <AppHeader />
+        <main v-if="hash === WIDGETS_HASH" class="app-page"><WidgetsPage /></main>
+        <main v-else class="app-browser">
+            <SideBar />
+            <ServiceArea />
+        </main>
+    </div>
     <DialogHost :dialogs="app.dialogs" :components="DIALOGS" />
 </template>
 
-<style scoped>
+<style>
 .app {
-    padding: 1rem 1.5rem 3rem;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    height: 100vh;
 }
 
-h1 {
-    margin: 0 0 1rem;
-    font-size: 1.4em;
-    font-weight: 600;
+.app-page {
+    padding: 1rem 1.5rem 3rem;
+    overflow: auto;
+}
+
+.app-browser {
+    display: grid;
+    grid-template-columns: 18rem minmax(0, 1fr);
+    min-height: 0;
 }
 </style>

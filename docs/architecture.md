@@ -21,7 +21,7 @@ The app is plain TypeScript classes that use Vue's reactivity as a library, with
 ```text
 App                      always runs; needs no connection
   Setup                  the servers and services set up, and what is current
-  Secrets                the passwords held in memory, by server
+  Secrets                the passwords and tokens held in memory, by server
   Dialogs                opens a dialog and returns its answer
   Session                one, for the active server; none when there is none
     FeathersConnection   feathers-connect's connection
@@ -36,7 +36,7 @@ Ownership is direct: an owner makes an object, holds it, and destroys it ([ADR 0
 |---|---|---|
 | `App` | a plain class, made once by `createGuiApp()` and provided to the components | the setup, the secrets, the dialogs, the session |
 | `Setup` | a plain class with reactive state | the servers and services the user has set up, saved in the browser |
-| `Secrets` | a plain class | the passwords typed in this window |
+| `Secrets` | a plain class | the passwords typed and the tokens pasted in this window |
 | `Session` | a live object with a state machine | the connection to the active server, its service views, its list of changes |
 | `ServiceView` | a live object | one service: its loader, its selection, its pins, the shape of its records |
 | `Changes` | a plain class with reactive state | the change events of the session, newest first |
@@ -46,7 +46,7 @@ Ownership is direct: an owner makes an object, holds it, and destroys it ([ADR 0
 
 `createGuiApp()` builds the app and returns it. `main.ts` provides it, and a component gets it with `useApp()`. Startup is that, and activating the server that was current last time if there is one. There are no startup phases: nothing needs a connection to begin.
 
-The app runs the flows that need a dialog (add a server, edit a service's fields, confirm a removal) as `async` methods: open the dialog, await its answer, write the setup. The objects below it never open a dialog. A session that needs a password says so in its status, and the app asks.
+The app runs the flows that need a dialog (add a server, edit a service's fields, confirm a removal) as `async` methods: open the dialog, await its answer, write the setup. A component calls the flow and does not write the setup itself; a dialog's component only answers. When the setup refuses a write, the flow says so in a dialog. The objects below it never open a dialog. A session that needs a password says so in its status, and the app asks.
 
 The app watches the setup of the active server. When what the connection depends on changes (the address, the login), the session is replaced. When the active server is removed, the session ends.
 
@@ -81,7 +81,7 @@ When something happens during a transition (the socket drops while logging in), 
 
 The session watches the services set up for its server: one added gets a view, one removed loses it.
 
-Logging in is by the `local` strategy, with the names of its fields settable per server, or by a pasted access token. A password stays in memory unless the user chooses to have it remembered ([ADR 008](decisions/008-passwords-in-memory.md)).
+Logging in is by the `local` strategy, with the names of its fields settable per server, or by a pasted access token. A password or a pasted token stays in memory unless the user chooses to have it remembered ([ADR 008](decisions/008-passwords-in-memory.md)).
 
 ### The Service View
 
@@ -169,6 +169,40 @@ The widgets are the app's own: a button, an input, a select, a checkbox, a field
 A widget names a role (`--ui-accent`), never a color, and a theme says what each of the twelve roles is. A theme is three seeds, from which its other roles are derived, and a test checks that what it makes can be read ([ADR 011](decisions/011-themes-from-seeds.md)). There is a light theme and a dark one; the app follows the system's setting until the user picks. Two have real behavior: the table, which draws only the rows in view, and the tree, which shows a record and edits a value in place.
 
 The page is mounted at once and renders from state. It never waits for a connection.
+
+### The Frame
+
+```text
++--------------------------------------------------------------+
+| feathers-gui                           [theme]  Info  GitHub |
++------------------+-------------------------------------------+
+| SERVER           |                                           |
+| [ a server   v] *|   the area of the current service         |
+| o its session    |                                           |
+|------------------|                                           |
+| SERVICES       + |                                           |
+|   labels         |                                           |
+| > messages       |                                           |
++------------------+-------------------------------------------+
+```
+
+- **The header** has the app's name, the choice of theme, and "Info", which says what the app is.
+- **The side bar** has the server this window works with, in a select, and under it the state of the session with that server. Below are the server's services, by path, each with what edits and removes it. Its width is fixed.
+- **The area of the current service** takes the rest of the window. Until there is a service to show, it says what is missing (no server set up, none chosen, no service set up, none chosen) and offers the way to it.
+- **What is chosen is this window's own:** the server, and the service of each server, so a switch of server comes back to where it was. The first server and the first service that are added are chosen by themselves.
+
+### The Dialogs
+
+A dialog is on the native `<dialog>` element. Escape closes it, the focus goes back to where it was, and in a window too short for it its body scrolls while its title and buttons stay.
+
+| dialog | for |
+|---|---|
+| the servers | every server set up, each with what edits and removes it; adding one; and the export and import of the whole setup, which are rarely used and so are here and not in the frame |
+| a server | its name and address, how to log in (not at all, the `local` strategy with the names of its fields, or a pasted access token), whether the password or the token is remembered, and whether the server is only read. Turning "remember" on says that it is stored as plain text ([ADR 008](decisions/008-passwords-in-memory.md)) |
+| a service | its path, and how it is loaded: auto, whole or paged, with auto chosen ([ADR 006](decisions/006-one-service-view-two-loaders.md)) |
+| a question | a removal, which is always asked first, with the focus on "Cancel"; how a file is imported (added to the setup, or in place of it); and a write the setup refused |
+
+An input that holds nothing personal (a path, an address, the name of a field) carries the attributes that keep a browser and a password manager from offering to fill it.
 
 ## Decisions
 

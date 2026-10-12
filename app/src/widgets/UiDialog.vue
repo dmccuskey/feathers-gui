@@ -53,6 +53,7 @@ function onClose(): void {
     width: min(32rem, calc(100vw - 2rem));
     max-height: calc(100vh - 2rem);
     padding: 0;
+    overflow: hidden;
     border: 1px solid var(--ui-border);
     border-radius: calc(var(--ui-radius) * 1.5);
     background: var(--ui-panel);
@@ -67,8 +68,12 @@ function onClose(): void {
     opacity: 0.7;
 }
 
+/* In a window too short for it, the body scrolls and the title and the buttons stay. */
 .ui-dialog-form {
     display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    box-sizing: border-box;
+    max-height: calc(100vh - 2rem - 2px);
     gap: calc(var(--ui-space) * 2.5);
     padding: calc(var(--ui-space) * 3);
 }
@@ -81,6 +86,11 @@ function onClose(): void {
 
 .ui-dialog-body {
     display: grid;
+    align-content: start;
+    /* Room for a control's ring of focus at the edge of what scrolls. */
+    margin: -4px;
+    padding: 4px;
+    overflow-y: auto;
     gap: calc(var(--ui-space) * 2);
 }
 

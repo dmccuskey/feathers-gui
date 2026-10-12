@@ -18,7 +18,7 @@ export interface LoginSetup {
     passwordField: string
     username: string
     remember: boolean
-    /** Only when `remember` is on. Stored as plain text. */
+    /** The password, or the token pasted for a login of kind `token`. Only when `remember` is on. Stored as plain text. */
     password?: string
 }
 

@@ -239,3 +239,235 @@ test('useApp() says so when no app is provided', () => {
 
     expect(() => mount(Reader, { global: { config: { warnHandler: () => {} } } })).toThrow('The app is not provided')
 })
+
+// The flows: each opens a dialog, and writes the setup with its answer.
+
+/** Answers the dialog on top, once it is open. */
+async function answer(app: App, kind: string, value: unknown): Promise<void> {
+    await Promise.resolve()
+
+    const dialog = app.dialogs.open.at(-1)
+
+    expect(dialog?.kind).toBe(kind)
+
+    if (value === undefined) dialog?.cancel()
+    else dialog?.answer(value)
+}
+
+function flowApp(): { app: App; log: string[] } {
+    const { options, log } = fakeSessions(new FakeBrowser().open())
+
+    return { app: new App(options), log }
+}
+
+const LOGIN = {
+    kind: 'local',
+    path: 'authentication',
+    usernameField: 'email',
+    passwordField: 'password',
+    username: 'ada@example.com',
+    remember: false,
+} as const
+
+test('the first server added is made the current one, and later ones are not', async () => {
+    const { app, log } = flowApp()
+
+    let flow = app.addServer()
+    await answer(app, 'server', { server: SERVER, secret: null })
+    await flow
+
+    flow = app.addServer()
+    await answer(app, 'server', { server: { ...SERVER, name: 'Other' }, secret: null })
+    await flow
+
+    expect(app.setup.servers.map(server => server.name)).toEqual(['Local', 'Other'])
+    expect(app.setup.currentServerId).toBe(app.setup.servers[0]?.id ?? null)
+    expect(log).toEqual(['make Local', 'open Local'])
+})
+
+test('a server dialog that is cancelled adds nothing', async () => {
+    const { app } = flowApp()
+    const flow = app.addServer()
+
+    await answer(app, 'server', undefined)
+    await flow
+
+    expect(app.setup.servers).toEqual([])
+})
+
+test('a password is held in memory, and in the setup only when it is to be remembered', async () => {
+    const { app } = flowApp()
+
+    let flow = app.addServer()
+    await answer(app, 'server', { server: { ...SERVER, login: LOGIN }, secret: 'hunter2' })
+    await flow
+
+    const id = app.setup.servers[0]?.id as string
+
+    expect(app.secrets.get(id)).toBe('hunter2')
+    expect(app.setup.server(id)?.login?.password).toBeUndefined()
+
+    // "Remember" turned on with nothing typed: the password in hand moves to the setup.
+    flow = app.editServer(id)
+    await Promise.resolve()
+    expect(app.dialogs.open[0]?.input).toMatchObject({ hasSecret: true })
+    await answer(app, 'server', { server: { ...SERVER, login: { ...LOGIN, remember: true } }, secret: null })
+    await flow
+
+    expect(app.setup.server(id)?.login?.password).toBe('hunter2')
+    expect(app.secrets.has(id)).toBe(false)
+
+    // And off again: it moves back.
+    flow = app.editServer(id)
+    await answer(app, 'server', { server: { ...SERVER, login: LOGIN }, secret: null })
+    await flow
+
+    expect(app.setup.server(id)?.login?.password).toBeUndefined()
+    expect(app.secrets.get(id)).toBe('hunter2')
+
+    // Another kind of login: the password is nothing to it.
+    flow = app.editServer(id)
+    await answer(app, 'server', { server: { ...SERVER, login: { ...LOGIN, kind: 'token' } }, secret: null })
+    await flow
+
+    expect(app.secrets.has(id)).toBe(false)
+
+    // A pasted token is kept as a password is.
+    flow = app.editServer(id)
+    await answer(app, 'server', {
+        server: { ...SERVER, login: { ...LOGIN, kind: 'token', remember: true } },
+        secret: 'a.b.c',
+    })
+    await flow
+
+    expect(app.setup.server(id)?.login?.password).toBe('a.b.c')
+    expect(app.secrets.has(id)).toBe(false)
+    expect(app.setup.export()).not.toContain('a.b.c')
+
+    // No login at all.
+    flow = app.editServer(id)
+    await answer(app, 'server', { server: SERVER, secret: null })
+    await flow
+
+    expect(app.setup.server(id)?.login).toBeUndefined()
+})
+
+test('the session starts again when the current server changes its address or login, and only then', async () => {
+    const { app, log } = flowApp()
+    const server = app.setup.addServer(SERVER)
+
+    app.activateServer(server.id)
+    log.length = 0
+
+    let flow = app.editServer(server.id)
+    await answer(app, 'server', { server: { ...SERVER, name: 'Renamed', readOnly: true }, secret: null })
+    await flow
+
+    expect(log).toEqual([])
+
+    flow = app.editServer(server.id)
+    await answer(app, 'server', { server: { ...SERVER, name: 'Renamed', url: 'http://localhost:3999' }, secret: null })
+    await flow
+
+    expect(log).toEqual(['destroy Local', 'make Renamed', 'open Renamed'])
+})
+
+test('a server is removed with its services only once the user agrees', async () => {
+    const { app, log } = flowApp()
+    const server = app.setup.addServer(SERVER)
+
+    app.setup.addService({ serverId: server.id, path: 'messages', load: 'auto', fields: [], pins: [] })
+    app.activateServer(server.id)
+
+    let flow = app.removeServer(server.id)
+    await Promise.resolve()
+    expect((app.dialogs.open[0]?.input as { text: string }).text).toContain('"Local" and its service will')
+    await answer(app, 'ask', 'cancel')
+    await flow
+
+    expect(app.setup.servers).toHaveLength(1)
+
+    flow = app.removeServer(server.id)
+    await answer(app, 'ask', 'remove')
+    await flow
+
+    expect(app.setup.servers).toEqual([])
+    expect(app.setup.servicesOf(server.id)).toEqual([])
+    expect(app.session).toBeNull()
+    expect(log.at(-1)).toBe('destroy Local')
+})
+
+test('a service is added to the current server, the first made current, and edited and removed', async () => {
+    const { app } = flowApp()
+    const server = app.setup.addServer(SERVER)
+
+    app.activateServer(server.id)
+
+    let flow = app.addService()
+    await answer(app, 'service', { path: 'messages', load: 'auto' })
+    await flow
+
+    flow = app.addService()
+    await Promise.resolve()
+    expect(app.dialogs.open[0]?.input).toEqual({ taken: ['messages'] })
+    await answer(app, 'service', { path: 'things', load: 'whole' })
+    await flow
+
+    const [messages, things] = app.setup.servicesOf(server.id)
+
+    expect(app.setup.currentServiceId(server.id)).toBe(messages?.id ?? null)
+    expect(things).toMatchObject({ path: 'things', load: 'whole', fields: [], pins: [] })
+
+    flow = app.editService(things?.id as string)
+    await Promise.resolve()
+    expect(app.dialogs.open[0]?.input).toMatchObject({ taken: ['messages'] })
+    await answer(app, 'service', { path: 'stuff', load: 'paged' })
+    await flow
+
+    expect(app.setup.service(things?.id as string)).toMatchObject({ path: 'stuff', load: 'paged' })
+
+    flow = app.removeService(messages?.id as string)
+    await answer(app, 'ask', 'remove')
+    await flow
+
+    expect(app.setup.servicesOf(server.id).map(service => service.path)).toEqual(['stuff'])
+    expect(app.setup.currentServiceId(server.id)).toBeNull()
+})
+
+test('an import asks how when something is set up, and says so when the file is no setup', async () => {
+    const { app } = flowApp()
+    const exported = (() => {
+        const other = new App({ storage: new FakeBrowser().open() })
+
+        other.setup.addServer({ ...SERVER, name: 'Imported' })
+
+        return other.setup.export()
+    })()
+
+    // Nothing set up: nothing to ask.
+    await app.importSetup(exported)
+    expect(app.setup.servers.map(server => server.name)).toEqual(['Imported'])
+
+    app.setup.addServer(SERVER)
+
+    let flow = app.importSetup(exported)
+    await answer(app, 'ask', 'merge')
+    await flow
+
+    expect(app.setup.servers.map(server => server.name)).toEqual(['Imported', 'Local'])
+
+    flow = app.importSetup(exported)
+    await answer(app, 'ask', 'replace')
+    await flow
+
+    expect(app.setup.servers.map(server => server.name)).toEqual(['Imported'])
+
+    flow = app.importSetup('{"not": "a setup"}')
+    await answer(app, 'ask', 'replace')
+    await Promise.resolve()
+    expect((app.dialogs.open[0]?.input as { text: string }).text).toBe('The file is not an exported setup.')
+    await answer(app, 'ask', 'ok')
+    await flow
+
+    expect(app.setup.servers.map(server => server.name)).toEqual(['Imported'])
+})
