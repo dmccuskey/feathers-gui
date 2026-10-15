@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test'
 import type { LoginSetup } from '../app/setup.ts'
-import { statusText } from './session-status.ts'
+import { statusText, type StatusText } from './session-status.ts'
 
 const LOCAL: LoginSetup = {
     kind: 'local',
@@ -22,23 +22,35 @@ test('no session, or one closed, is not connected, with the reason of a refusal'
     })
 })
 
-test('connecting and lost say whether an attempt has failed, with its reason', () => {
+test('connecting and lost say whether an attempt has failed, with its reason, and offer to try now', () => {
     expect(statusText({ phase: 'connecting', attempts: 0 }, undefined)).toEqual({ tone: 'busy', line: 'Connecting…' })
     expect(statusText({ phase: 'connecting', attempts: 2, error: REASON }, undefined)).toEqual({
         tone: 'busy',
         strong: 'Can’t reach the server.',
         line: 'Trying again soon…',
         detail: 'ECONNREFUSED',
+        action: 'try-now',
     })
     expect(statusText({ phase: 'lost', attempts: 0 }, undefined)).toEqual({
         tone: 'busy',
         strong: 'Connection lost.',
         line: 'Reconnecting…',
+        action: 'try-now',
     })
     expect(statusText({ phase: 'lost', attempts: 1, error: REASON }, undefined)).toMatchObject({
         line: 'Trying again soon…',
         detail: 'ECONNREFUSED',
+        action: 'try-now',
     })
+})
+
+test('trying now says it is connecting, until the attempt ends', () => {
+    const connecting: StatusText = { tone: 'busy', line: 'Connecting…' }
+
+    expect(statusText({ phase: 'connecting', attempts: 2, error: REASON, isRetrying: true }, undefined)).toEqual(
+        connecting,
+    )
+    expect(statusText({ phase: 'lost', attempts: 1, error: REASON, isRetrying: true }, undefined)).toEqual(connecting)
 })
 
 test('a session waiting for a login offers it, with the reason of a refusal', () => {

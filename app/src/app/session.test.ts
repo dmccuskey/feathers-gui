@@ -155,6 +155,80 @@ test('a connection lost during a transition is acted on when the transition ends
     expect(session.status.phase).toBe('ready')
 })
 
+test('retryNow() while connecting tries again at once, and the attempt it ends is not a failure', async () => {
+    const { session, connection } = makeSession({ manual: true })
+    const opened = session.open()
+
+    await settled()
+    connection.failAttempt(new Error('ECONNREFUSED'))
+    session.retryNow()
+    expect(session.status).toEqual({
+        phase: 'connecting',
+        error: { message: 'ECONNREFUSED' },
+        attempts: 1,
+        isRetrying: true,
+    })
+
+    await settled()
+    expect(connection.disconnects).toBe(1)
+    expect(connection.connects).toBe(2)
+    expect(session.status.phase).toBe('connecting')
+
+    connection.failAttempt(new Error('timeout'))
+    await settled()
+    expect(session.status).toEqual({ phase: 'connecting', error: { message: 'timeout' }, attempts: 2 })
+
+    connection.accept()
+    await opened
+    expect(session.status).toEqual({ phase: 'ready', attempts: 0 })
+})
+
+test('retryNow() while lost tries again at once', async () => {
+    const { session, connection } = makeSession({ manual: true })
+    const opened = session.open()
+
+    await settled()
+    connection.accept()
+    await opened
+    connection.drop()
+    await settled()
+
+    session.retryNow()
+    await settled()
+    expect(session.status).toEqual({ phase: 'lost', attempts: 0, isRetrying: true })
+    expect(connection.connects).toBe(2)
+
+    connection.accept()
+    await settled()
+    expect(session.status).toEqual({ phase: 'ready', attempts: 0 })
+})
+
+test('retryNow() does nothing unless the session is connecting or lost', async () => {
+    const { session, connection } = makeSession()
+
+    session.retryNow()
+    await session.open()
+    session.retryNow()
+    await settled()
+
+    expect(session.status).toEqual({ phase: 'ready', attempts: 0 })
+    expect(connection.disconnects).toBe(0)
+    expect(connection.connects).toBe(1)
+})
+
+test('a server that refuses the attempt retryNow() made closes the session', async () => {
+    const { session, connection } = makeSession({ manual: true })
+    const opened = session.open()
+
+    await settled()
+    session.retryNow()
+    await settled()
+    connection.refuse(new Error('Forbidden'))
+    await opened
+
+    expect(session.status).toEqual({ phase: 'closed', error: { message: 'Forbidden' }, attempts: 1 })
+})
+
 test('a session destroyed while it connects stays closed, and stops the connection', async () => {
     const { session, connection } = makeSession({ manual: true })
     const opened = session.open()

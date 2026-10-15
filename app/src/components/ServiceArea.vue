@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // The area of the current service. Until there is one, it says what is missing and offers the way to it. Of the
-// service it shows a first page of records as they are, until there is a service view.
+// service it shows a first page of records as they are, until there is a service view. The records stay, dimmed,
+// while the connection is being brought back.
 import { computed, shallowRef, watch } from 'vue'
 import { useApp } from '../app/app.ts'
 import type { RecordEnvelope } from '../app/session.ts'
@@ -23,12 +24,15 @@ const failure = shallowRef<string | null>(null)
 
 watch(
     () => [app.session, status.value?.phase, service.value?.path] as const,
-    async ([session, phase, path], _before, onCleanup) => {
+    async ([session, phase, path], before, onCleanup) => {
         let current = true
 
         onCleanup(() => (current = false))
-        records.value = null
         failure.value = null
+        // Kept through a lost connection and the login again after it, until there are new ones
+        if (session !== before?.[0] || path !== before?.[2] || phase === 'login-needed' || phase === 'closed') {
+            records.value = null
+        }
 
         if (!session || phase !== 'ready' || path === undefined) return
 
@@ -70,7 +74,11 @@ watch(
         <!-- The service view comes here. -->
         <template v-else>
             <h2 class="service-area-path">{{ service.path }}</h2>
-            <p v-if="status?.error && status.phase !== 'login-needed'" class="service-area-notice" role="alert">
+            <p
+                v-if="status?.error && status.phase !== 'login-needed' && status.phase !== 'lost'"
+                class="service-area-notice"
+                role="alert"
+            >
                 {{ status.error.message }}
             </p>
             <p v-else-if="failure" class="service-area-notice" role="alert">{{ failure }}</p>
@@ -79,9 +87,10 @@ watch(
                 <p>Log in to read this server's records.</p>
                 <UiButton variant="primary" @click="app.logIn()">Log In</UiButton>
             </div>
+            <p v-else-if="!records && status?.phase === 'lost'" class="service-area-status">Connection lost.</p>
             <p v-else-if="!records" class="service-area-status">Loading…</p>
             <p v-else-if="records.length === 0" class="service-area-status">No records.</p>
-            <ol v-else class="service-area-records">
+            <ol v-else class="service-area-records" :class="{ 'service-area-stale': status?.phase !== 'ready' }">
                 <li v-for="record in records" :key="record.id">{{ JSON.stringify(record.raw) }}</li>
             </ol>
         </template>
@@ -140,6 +149,10 @@ watch(
     list-style: none;
     font-family: var(--ui-mono);
     font-size: 0.9em;
+}
+
+.service-area-stale {
+    opacity: 0.5;
 }
 
 .service-area-records li {

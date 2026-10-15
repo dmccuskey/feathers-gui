@@ -2,16 +2,26 @@ import { expect, test } from 'bun:test'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { FakeBrowser, FakeStorage } from '../../test-support/fake-browser.ts'
-import { fakeSessions, type FakeConnectionOptions } from '../../test-support/fake-connection.ts'
+import {
+    fakeConnection,
+    fakeSessions,
+    type FakeConnection,
+    type FakeConnectionOptions,
+} from '../../test-support/fake-connection.ts'
 import { APP_KEY, App as GuiApp } from '../app/app.ts'
+import { Session } from '../app/session.ts'
 import type { ServerSetup, ServiceSetup } from '../app/setup.ts'
 import { THEMING_KEY, Theming } from '../widgets/index.ts'
 import App from './App.vue'
 
-function mountApp(connection: FakeConnectionOptions = {}) {
+/** `connection`: the options of each session's fake connection, or the one connection every session uses. */
+function mountApp(connection: FakeConnectionOptions | FakeConnection = {}) {
     const app = new GuiApp({
         storage: new FakeBrowser().open(),
-        makeSession: fakeSessions(connection),
+        makeSession:
+            'connect' in connection
+                ? (server, parts) => new Session(server, { ...parts, makeConnection: () => connection })
+                : fakeSessions(connection),
         secrets: { channel: null },
     })
     const theming = new Theming({
@@ -125,6 +135,37 @@ test('a server that cannot be reached shows the reason', async () => {
     await flushPromises()
 
     expect(wrapper.find('.service-area-notice').text()).toBe('Could not connect')
+})
+
+test('a connection lost keeps the records, dimmed, and "Try Now" tries again at once', async () => {
+    const connection = fakeConnection({ manual: true, services: { things: [{ _id: 'a', name: 'first' }] } })
+    const { app, wrapper } = mountApp(connection)
+    const server = addServer(app, 'local')
+
+    app.activateServer(server.id)
+    app.setup.setCurrentService(server.id, addService(app, server, 'things').id)
+    await flushPromises()
+    connection.accept()
+    await flushPromises()
+
+    connection.drop()
+    connection.failAttempt(new Error('ECONNREFUSED'))
+    await flushPromises()
+    expect(wrapper.find('.service-area-notice').exists()).toBe(false)
+    expect(wrapper.find('.service-area-records').classes()).toContain('service-area-stale')
+    expect(wrapper.find('.session-status-detail').text()).toBe('ECONNREFUSED')
+
+    const tryNow = wrapper.findAll('.session-status button').find(button => button.text() === 'Try Now')
+
+    await tryNow!.trigger('click')
+    await flushPromises()
+    expect(connection.connects).toBe(2)
+    expect(wrapper.find('.session-status-line').text()).toBe('Connecting…')
+
+    connection.accept()
+    await flushPromises()
+    expect(wrapper.find('.service-area-records').classes()).not.toContain('service-area-stale')
+    expect(wrapper.find('.session-status-line').text()).toBe('Connected')
 })
 
 test('a setup that cannot be used is said', async () => {

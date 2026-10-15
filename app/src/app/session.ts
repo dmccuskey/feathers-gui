@@ -57,6 +57,8 @@ export interface SessionStatus {
     attempts: number
     /** The record logged in as, as the server answered. */
     user?: Record<string, unknown>
+    /** `retryNow()` was called, and the attempt it made has not yet ended. */
+    isRetrying?: boolean
 }
 
 /** How many records `firstPage()` returns at most. */
@@ -91,6 +93,9 @@ export class Session {
     #isSettling = false
     #attempts = 0
     #error: SessionStatus['error']
+    #isRetrying = false
+    // Counts the `connect()` calls; one that is not the last ended by `retryNow()`, which is not a failure
+    #connectCount = 0
     #destroyed = false
     // The `open()` calls waiting for the session to be ready, or closed again
     #arrivals = new Set<() => void>()
@@ -132,6 +137,7 @@ export class Session {
                 closed: {
                     from: '*',
                     enter: () => {
+                        this.#isRetrying = false
                         this.#endLogin()
                         this.#refuseLogins(new Error('The session was closed'))
                         void this.#connection.disconnect()
@@ -144,6 +150,7 @@ export class Session {
             this.#connection.onConnected(() => {
                 this.#attempts = 0
                 this.#error = undefined
+                this.#isRetrying = false
                 this.#want(server.login ? 'logging-in' : 'ready')
             }),
             this.#connection.onDisconnected(() => this.#want('lost')),
@@ -170,6 +177,7 @@ export class Session {
             this.#connection.onConnectError(error => {
                 this.#attempts++
                 this.#error = { message: error.message }
+                this.#isRetrying = false
                 this.#publish()
             }),
             // A secret that comes while the session waits for one: typed in another window, or remembered
@@ -241,6 +249,24 @@ export class Session {
         else this.#want('logging-in')
 
         return result
+    }
+
+    /**
+     * Tries to connect at once, while connecting or lost, in place of waiting for the next attempt. The waits
+     * between attempts start again from the shortest.
+     */
+    retryNow(): void {
+        const phase = this.#machine.state
+
+        if ((phase !== 'connecting' && phase !== 'lost') || this.#wanted !== phase) return
+
+        // The `connect()` under way ends now, and is not a failure
+        this.#connectCount++
+        this.#isRetrying = true
+        this.#publish()
+        void this.#connection.disconnect().then(() => {
+            if (this.#wanted === 'connecting' || this.#wanted === 'lost') this.#connect()
+        })
     }
 
     /** Logs out, and forgets the secret held for this window. The session waits for `login()`. */
@@ -408,9 +434,11 @@ export class Session {
 
     /** Starts to connect. A connection the server refuses closes the session, with the reason. */
     #connect(): void {
+        const count = ++this.#connectCount
+
         this.#connection.connect().catch((error: unknown) => {
-            // A connect() ended by closing the session is not a failure
-            if (this.#wanted === 'closed') return
+            // A connect() ended by closing the session, or by trying again at once, is not a failure
+            if (count !== this.#connectCount || this.#wanted === 'closed') return
 
             this.#error = { message: messageOf(error) }
             this.#want('closed')
@@ -425,6 +453,7 @@ export class Session {
             ...(this.#error ? { error: this.#error } : {}),
             attempts: this.#attempts,
             ...(phase === 'ready' && this.#connection.user ? { user: this.#connection.user } : {}),
+            ...(this.#isRetrying ? { isRetrying: true } : {}),
         }
     }
 

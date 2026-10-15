@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // The state of the session with the current server, under the server's select: a dot, a line, the reason of the
-// last failure, and the button to log in or out.
+// last failure, and the button to log in or out, or to try again at once.
 import { computed } from 'vue'
 import { useApp } from '../app/app.ts'
 import { UiButton } from '../widgets/index.ts'
@@ -26,6 +26,9 @@ const text = computed(() => {
         </p>
         <p v-if="text.detail" class="session-status-detail">{{ text.detail }}</p>
         <UiButton v-if="text.action === 'log-in'" class="session-status-button" @click="app.logIn()">Log In</UiButton>
+        <UiButton v-else-if="text.action === 'try-now'" class="session-status-button" @click="app.session?.retryNow()"
+            >Try Now</UiButton
+        >
         <UiButton
             v-else-if="text.action === 'log-out'"
             variant="quiet"
