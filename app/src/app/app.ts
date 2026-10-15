@@ -80,13 +80,18 @@ export class App {
         this.#makeSession = options.makeSession ?? ((server, parts) => new Session(server, parts))
 
         this.#scope.run(() => {
-            // The secret of a server goes with the server, whichever window removed it.
+            // Whichever window changed the setup: the secret of a server goes with the server or with its login,
+            // and the session follows its server.
             watch(
                 () => this.setup.servers,
                 (servers, before) => {
                     for (const server of before) {
-                        if (!servers.some(other => other.id === server.id)) this.secrets.forget(server.id)
+                        const after = servers.find(other => other.id === server.id)
+
+                        if (!after || !sameLogin(after, server)) this.secrets.forget(server.id)
                     }
+
+                    this.#followServer(servers, before)
                 },
                 { flush: 'sync' },
             )
@@ -144,7 +149,7 @@ export class App {
         })
     }
 
-    /** Asks for the changes to a server and makes them. The session with it starts again when they touch it. */
+    /** Asks for the changes to a server and makes them. */
     async editServer(serverId: string): Promise<void> {
         const before = this.setup.server(serverId)
 
@@ -162,11 +167,6 @@ export class App {
         await this.#write(() => {
             this.setup.updateServer(serverId, { login: undefined, ...withSecret(answer.server, secret) })
             this.#keepSecret(serverId, answer.server, secret)
-
-            const after = this.setup.server(serverId)
-            const same = after?.url === before.url && JSON.stringify(after.login) === JSON.stringify(before.login)
-
-            if (!same && this.setup.currentServerId === serverId) this.activateServer(serverId)
         })
     }
 
@@ -189,11 +189,7 @@ export class App {
 
         if (answer !== 'remove') return
 
-        await this.#write(() => {
-            if (this.setup.currentServerId === serverId) this.deactivate()
-
-            this.setup.removeServer(serverId)
-        })
+        await this.#write(() => this.setup.removeServer(serverId))
     }
 
     /** Asks for a new service of the current server and adds it. The first service is made the current one. */
@@ -264,15 +260,7 @@ export class App {
 
         if (how !== 'merge' && how !== 'replace') return
 
-        await this.#write(() => {
-            this.setup.import(json, how)
-
-            // The current server may be gone, or have changed under its session.
-            const serverId = this.setup.currentServerId
-
-            if (serverId === null) this.#endSession()
-            else this.activateServer(serverId)
-        })
+        await this.#write(() => this.setup.import(json, how))
     }
 
     /** Ends the session and everything the app owns. What is current stays, for the next start. */
@@ -305,12 +293,30 @@ export class App {
         else this.secrets.forget(serverId)
     }
 
+    /** Ends the session when its server is removed, and makes a new one when its address or login changes. */
+    #followServer(servers: readonly ServerSetup[], before: readonly ServerSetup[]): void {
+        const serverId = this.#session.value?.serverId
+
+        if (serverId === undefined) return
+
+        const was = before.find(server => server.id === serverId)
+        const now = servers.find(server => server.id === serverId)
+
+        if (!now) this.deactivate()
+        else if (was && (now.url !== was.url || !sameLogin(now, was))) this.activateServer(serverId)
+    }
+
     #endSession(): void {
         const session = this.#session.value
 
         this.#session.value = null
         session?.destroy()
     }
+}
+
+/** Whether two setups of a server log in alike: the same kind, path, fields, user, and remembered password. */
+function sameLogin(a: ServerSetup, b: ServerSetup): boolean {
+    return JSON.stringify(a.login) === JSON.stringify(b.login)
 }
 
 /** The server with its secret as the remembered password, when it has a login that remembers. */

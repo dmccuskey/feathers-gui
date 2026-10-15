@@ -10,6 +10,14 @@ import { Setup, type ServerSetup } from './setup.ts'
 const SERVER: Omit<ServerSetup, 'id'> = { name: 'Local', url: 'http://localhost:3041', readOnly: false }
 // Each test's windows keep their secrets to themselves: one about sharing them says so
 const ALONE = { channel: null }
+const LOGIN = {
+    kind: 'local',
+    path: 'authentication',
+    usernameField: 'email',
+    passwordField: 'password',
+    username: 'ada@example.com',
+    remember: false,
+} as const
 
 /** A session that records what the app does with it, and connects to nothing. */
 class LoggedSession extends Session {
@@ -170,6 +178,78 @@ test('the secret of a server goes when the server is removed, in this window or 
     expect(app.secrets.has(kept.id)).toBe(true)
 })
 
+test('the secret of a server goes when its login changes, in this window or another, and stays otherwise', () => {
+    const browser = new FakeBrowser()
+    const app = new App({ storage: browser.open(), makeSession: fakeSessions(), secrets: ALONE })
+    const elsewhere = new Setup(browser.open())
+    const login = { ...SERVER, login: { ...LOGIN } }
+    const local = app.setup.addServer(login)
+    const other = app.setup.addServer({ ...login, name: 'Other' })
+    const kept = app.setup.addServer({ ...login, name: 'Kept' })
+    for (const server of [local, other, kept]) app.secrets.set(server.id, 'typed')
+
+    app.setup.updateServer(local.id, { login: { ...LOGIN, username: 'grace@example.com' } })
+    elsewhere.updateServer(other.id, { login: { ...LOGIN, path: 'auth' } })
+    elsewhere.updateServer(kept.id, { name: 'Renamed', url: 'http://localhost:3999', readOnly: true })
+
+    expect(app.secrets.has(local.id)).toBe(false)
+    expect(app.secrets.has(other.id)).toBe(false)
+    expect(app.secrets.held(kept.id)).toBe('typed')
+})
+
+test('the session follows its server when another window changes it', () => {
+    const browser = new FakeBrowser()
+    const { options, log } = loggedSessions(browser.open())
+    const app = new App(options)
+    const elsewhere = new Setup(browser.open())
+    const server = app.setup.addServer(SERVER)
+    const other = app.setup.addServer({ ...SERVER, name: 'Other' })
+    app.activateServer(server.id)
+    log.length = 0
+
+    elsewhere.updateServer(server.id, { name: 'Renamed', readOnly: true })
+    elsewhere.updateServer(other.id, { url: 'http://localhost:3999' })
+    expect(log).toEqual([])
+
+    elsewhere.updateServer(server.id, { url: 'http://localhost:3999' })
+    expect(log).toEqual(['destroy Local', 'make Renamed', 'open Renamed'])
+
+    elsewhere.updateServer(server.id, { login: { ...LOGIN } })
+    expect(log.slice(3)).toEqual(['destroy Renamed', 'make Renamed', 'open Renamed'])
+
+    elsewhere.removeServer(server.id)
+    expect(log.slice(6)).toEqual(['destroy Renamed'])
+    expect(app.session).toBeNull()
+    expect(app.setup.currentServerId).toBeNull()
+})
+
+test('an import replaces the session only when it changes the server, and ends it when it removes it', async () => {
+    const { app, log } = flowApp()
+    const server = app.setup.addServer(SERVER)
+    app.activateServer(server.id)
+    log.length = 0
+
+    const exported = (changes: Partial<ServerSetup>) =>
+        JSON.stringify({ version: 1, servers: [{ ...server, ...changes }], services: [] })
+    const unrelated = JSON.stringify({ version: 1, servers: [{ ...SERVER, id: 'other' }], services: [] })
+
+    let flow = app.importSetup(exported({ name: 'Same place' }))
+    await answer(app, 'ask', 'merge')
+    await flow
+    expect(log).toEqual([])
+
+    flow = app.importSetup(exported({ name: 'Same place', url: 'http://localhost:3999' }))
+    await answer(app, 'ask', 'merge')
+    await flow
+    expect(log).toEqual(['destroy Local', 'make Same place', 'open Same place'])
+
+    flow = app.importSetup(unrelated)
+    await answer(app, 'ask', 'replace')
+    await flow
+    expect(log.slice(3)).toEqual(['destroy Same place'])
+    expect(app.session).toBeNull()
+})
+
 test('destroy() ends the session, the dialogs and the secrets, and keeps what is current', async () => {
     const browser = new FakeBrowser()
     const { options, log } = loggedSessions(browser.open())
@@ -278,15 +358,6 @@ function flowApp(): { app: App; log: string[] } {
 
     return { app: new App(options), log }
 }
-
-const LOGIN = {
-    kind: 'local',
-    path: 'authentication',
-    usernameField: 'email',
-    passwordField: 'password',
-    username: 'ada@example.com',
-    remember: false,
-} as const
 
 test('the first server added is made the current one, and later ones are not', async () => {
     const { app, log } = flowApp()
