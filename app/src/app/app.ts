@@ -4,11 +4,12 @@
 import { effectScope, inject, shallowRef, watch, type InjectionKey } from 'vue'
 import { Dialogs } from './dialogs.ts'
 import { Secrets, type SecretsOptions } from './secrets.ts'
-import { Session, type SessionParts } from './session.ts'
+import { Session, type LoginCredentials, type SessionParts } from './session.ts'
 import {
     Setup,
     SetupBlockedError,
     SetupImportError,
+    type LoginSetup,
     type ServerSetup,
     type ServiceSetup,
     type SetupOptions,
@@ -21,6 +22,7 @@ export type AppDialogs = {
     servers: { input: null; answer: null }
     server: { input: ServerDialogInput; answer: ServerDialogAnswer }
     service: { input: ServiceDialogInput; answer: ServiceDialogAnswer }
+    login: { input: LoginDialogInput; answer: null }
 }
 
 /** A question with a button for each answer. The first button is where the focus starts. */
@@ -53,6 +55,21 @@ export interface ServiceDialogInput {
 
 export type ServiceDialogAnswer = Pick<ServiceSetup, 'path' | 'load'>
 
+export interface LoginDialogInput {
+    /** The server to log in to, with its login. */
+    server: ServerSetup & { login: LoginSetup }
+    /** Why the last login failed, when it did. */
+    reason?: string
+    /**
+     * Logs in, and remembers the password or the token in the setup once the server accepts it, if asked to.
+     * Rejects with the server's reason; the dialog stays open for another try.
+     */
+    logIn(credentials: LoginCredentials, remember: boolean): Promise<void>
+}
+
+/** What the app needs of the page: whether it is shown, and when that changes. Default: `document`. */
+export type PageVisibility = Pick<Document, 'visibilityState' | 'addEventListener' | 'removeEventListener'>
+
 export interface AppOptions {
     /** Where the setup is kept. Default: the browser's storage. */
     storage?: SetupOptions
@@ -60,6 +77,8 @@ export interface AppOptions {
     makeSession?: (server: ServerSetup, parts: SessionParts) => Session
     /** How the secrets are shared with the other windows. Default: over the app's `BroadcastChannel`. */
     secrets?: SecretsOptions
+    /** Whether the page is shown: a login dialog waits for it. Default: `document`, when there is one. */
+    page?: PageVisibility | null
 }
 
 /** The key the app is provided under: `vueApp.provide(APP_KEY, app)`. */
@@ -73,11 +92,16 @@ export class App {
     readonly #makeSession: NonNullable<AppOptions['makeSession']>
     readonly #session = shallowRef<Session | null>(null)
     readonly #scope = effectScope(true)
+    readonly #page: PageVisibility | null
+    // The login dialog was shown for this session, or the user logged out: it does not open by itself again
+    #isLoginAsked = false
 
     constructor(options: AppOptions = {}) {
         this.setup = new Setup(options.storage)
         this.secrets = new Secrets(options.secrets)
         this.#makeSession = options.makeSession ?? ((server, parts) => new Session(server, parts))
+        this.#page = options.page === undefined ? (globalThis.document ?? null) : options.page
+        this.#page?.addEventListener('visibilitychange', this.#onVisibility)
 
         this.#scope.run(() => {
             // Whichever window changed the setup: the secret of a server goes with the server or with its login,
@@ -92,6 +116,16 @@ export class App {
                     }
 
                     this.#followServer(servers, before)
+                },
+                { flush: 'sync' },
+            )
+            // The login dialog opens by itself when the session waits for a login, and goes when it is not needed
+            watch(
+                () => [this.#session.value, this.#session.value?.status.phase] as const,
+                ([session, phase], before) => {
+                    // Not while logging in: that is the dialog's own login, and a refusal comes back to it
+                    if (session !== before?.[0] || phase === 'ready' || phase === 'closed') this.#closeLogin()
+                    if (phase === 'login-needed') this.#askLoginOnce()
                 },
                 { flush: 'sync' },
             )
@@ -111,6 +145,7 @@ export class App {
 
         this.#endSession()
         this.setup.currentServerId = serverId
+        this.#isLoginAsked = false
 
         const session = this.#makeSession(server, { setup: this.setup, secrets: this.secrets })
 
@@ -122,6 +157,51 @@ export class App {
     deactivate(): void {
         this.#endSession()
         this.setup.currentServerId = null
+    }
+
+    /**
+     * Asks for the password or the token of the session's server, and logs in with it. The dialog stays until the
+     * server accepts it or the user cancels, and goes by itself when the session no longer waits for a login.
+     */
+    async logIn(): Promise<void> {
+        const session = this.#session.value
+        const server = session ? this.setup.server(session.serverId) : undefined
+        const login = server?.login
+
+        if (!session || !server || !login || session.status.phase !== 'login-needed') return
+        if (this.dialogs.open.some(dialog => dialog.kind === 'login')) return
+
+        this.#isLoginAsked = true
+
+        const reason = session.status.error?.message
+
+        await this.dialogs.show('login', {
+            server: { ...server, login },
+            ...(reason === undefined ? {} : { reason }),
+            logIn: async (credentials, remember) => {
+                await session.login(credentials)
+
+                if (!remember || this.#session.value !== session) return
+
+                const secret = 'token' in credentials ? credentials.token : credentials.password
+                const now = this.setup.server(server.id)?.login
+
+                if (!now) return
+
+                // Remembered in the setup, it is no longer held in memory
+                await this.#write(() => {
+                    this.setup.updateServer(server.id, { login: { ...now, remember: true, password: secret } })
+                    this.secrets.forget(server.id)
+                })
+            },
+        })
+    }
+
+    /** Logs out of the session's server. The login dialog does not open by itself until the next session. */
+    async logOut(): Promise<void> {
+        this.#isLoginAsked = true
+        this.#closeLogin()
+        await this.#session.value?.logout()
     }
 
     /** Shows what the app is. */
@@ -266,6 +346,7 @@ export class App {
     /** Ends the session and everything the app owns. What is current stays, for the next start. */
     destroy(): void {
         this.#scope.stop()
+        this.#page?.removeEventListener('visibilitychange', this.#onVisibility)
         this.#endSession()
         this.dialogs.destroy()
         this.secrets.destroy()
@@ -306,6 +387,21 @@ export class App {
         else if (was && (now.url !== was.url || !sameLogin(now, was))) this.activateServer(serverId)
     }
 
+    /** Opens the login dialog once for the session, when the page is shown; a page hidden waits until it is. */
+    #askLoginOnce(): void {
+        if (this.#isLoginAsked || this.#page?.visibilityState === 'hidden') return
+
+        void this.logIn()
+    }
+
+    #onVisibility = (): void => {
+        if (this.#session.value?.status.phase === 'login-needed') this.#askLoginOnce()
+    }
+
+    #closeLogin(): void {
+        for (const dialog of this.dialogs.open) if (dialog.kind === 'login') dialog.cancel()
+    }
+
     #endSession(): void {
         const session = this.#session.value
 
@@ -314,9 +410,20 @@ export class App {
     }
 }
 
-/** Whether two setups of a server log in alike: the same kind, path, fields, user, and remembered password. */
+/**
+ * Whether two setups of a server log in alike: the same kind, path, fields and user. Whether the password is
+ * remembered, and which, is not the login: the session takes a password remembered when it waits for one.
+ */
 function sameLogin(a: ServerSetup, b: ServerSetup): boolean {
-    return JSON.stringify(a.login) === JSON.stringify(b.login)
+    return JSON.stringify(loginOf(a)) === JSON.stringify(loginOf(b))
+}
+
+function loginOf(server: ServerSetup): Omit<LoginSetup, 'password' | 'remember'> | undefined {
+    if (!server.login) return undefined
+
+    const { password: _password, remember: _remember, ...login } = server.login
+
+    return login
 }
 
 /** The server with its secret as the remembered password, when it has a login that remembers. */

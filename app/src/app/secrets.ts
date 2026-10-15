@@ -34,6 +34,7 @@ export class Secrets {
     // What this window is asking the others, by the ask's ID, and the answer awaited, by server
     readonly #asking = new Map<string, Asking>()
     readonly #answers = new Map<string, Promise<string | undefined>>()
+    readonly #setListeners = new Set<(serverId: string) => void>()
 
     constructor(options: SecretsOptions = {}) {
         const name = options.channel === undefined ? SECRETS_CHANNEL : options.channel
@@ -76,6 +77,14 @@ export class Secrets {
         }
         this.#secrets.set(serverId, secret)
         this.#send({ kind: 'set', serverId, secret })
+        this.#told(serverId)
+    }
+
+    /** Calls the listener with the server's ID each time a secret is set, in this window or another. */
+    onSet(listener: (serverId: string) => void): () => void {
+        this.#setListeners.add(listener)
+
+        return () => void this.#setListeners.delete(listener)
     }
 
     /** Forgets the secret in this window only: for logging out, a login that changed, or a server that was removed. */
@@ -92,6 +101,7 @@ export class Secrets {
     /** Forgets them all, and stops sharing. An answer awaited is none. */
     destroy(): void {
         this.#secrets.clear()
+        this.#setListeners.clear()
         for (const asking of [...this.#asking.values()]) asking.done(undefined)
         this.#channel?.close()
         this.#channel = null
@@ -134,11 +144,16 @@ export class Secrets {
                 break
             case 'set':
                 this.#secrets.set(message.serverId, message.secret)
+                this.#told(message.serverId)
                 break
             case 'refused':
                 this.#forgetIfHeld(message.serverId, message.secret)
                 break
         }
+    }
+
+    #told(serverId: string): void {
+        for (const listener of [...this.#setListeners]) listener(serverId)
     }
 
     #forgetIfHeld(serverId: string, secret: string): void {

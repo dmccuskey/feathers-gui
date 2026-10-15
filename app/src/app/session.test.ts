@@ -14,6 +14,7 @@ interface Made {
     session: Session
     connection: FakeConnection
     secrets: Secrets
+    setup: Setup
 }
 
 /** A session with a fake connection. `login`: the server's login, as set up. */
@@ -47,6 +48,7 @@ function makeSession(
         session: new Session(server, { setup, secrets, makeConnection: () => connection, loginWait: 20 }),
         connection,
         secrets,
+        setup,
     }
 }
 
@@ -330,6 +332,59 @@ test('a password refused is forgotten in the other windows too', async () => {
     session.destroy()
     secrets.destroy()
     other.destroy()
+})
+
+test('a session waiting for a login logs in with a password that arrives from another window', async () => {
+    const channel = `test:${crypto.randomUUID()}`
+    const other = new Secrets({ channel, askWait: 10 })
+    const { session, connection, secrets } = makeSession(
+        { password: 'secret' },
+        {},
+        new Secrets({ channel, askWait: 10 }),
+    )
+
+    await session.open()
+    expect(session.status.phase).toBe('login-needed')
+
+    other.set(session.serverId, 'secret')
+    await Bun.sleep(5)
+    await settled()
+
+    expect(connection.logins).toEqual([{ strategy: 'local', email: 'ada@example.com', password: 'secret' }])
+    expect(session.status.phase).toBe('ready')
+    session.destroy()
+    secrets.destroy()
+    other.destroy()
+})
+
+test('a session waiting for a login logs in with a password remembered meanwhile', async () => {
+    const { session, connection, setup } = makeSession({ password: 'secret' }, {})
+    const login = setup.server(session.serverId)?.login as LoginSetup
+
+    await session.open()
+    expect(session.status.phase).toBe('login-needed')
+
+    setup.updateServer(session.serverId, { login: { ...login, remember: true, password: 'secret' } })
+    await Bun.sleep(1)
+    await settled()
+
+    expect(connection.logins).toEqual([{ strategy: 'local', email: 'ada@example.com', password: 'secret' }])
+    expect(session.status.phase).toBe('ready')
+})
+
+test('after logout() a password that arrives does not log the session in', async () => {
+    const { session, connection, secrets } = makeSession({ password: 'secret' }, {})
+
+    await session.open()
+    await session.login({ username: 'ada@example.com', password: 'secret' })
+    await session.logout()
+    await settled()
+
+    secrets.set(session.serverId, 'secret')
+    await settled()
+
+    expect(session.status.phase).toBe('login-needed')
+    expect(connection.logins).toHaveLength(1)
 })
 
 test('a login that fails without a refusal keeps the password, and waits for login()', async () => {

@@ -3,7 +3,16 @@ import { mount } from '@vue/test-utils'
 import { defineComponent, h, watch } from 'vue'
 import { FakeBrowser, type FakeWindow } from '../../test-support/fake-browser.ts'
 import { fakeConnection, fakeSessions } from '../../test-support/fake-connection.ts'
-import { APP_KEY, App, createGuiApp, useApp, type AppOptions } from './app.ts'
+import {
+    APP_KEY,
+    App,
+    createGuiApp,
+    useApp,
+    type AppOptions,
+    type LoginDialogInput,
+    type PageVisibility,
+} from './app.ts'
+import type { OpenDialog } from './dialogs.ts'
 import { Session, type SessionParts } from './session.ts'
 import { Setup, type ServerSetup } from './setup.ts'
 
@@ -560,4 +569,168 @@ test('an import asks how when something is set up, and says so when the file is 
     await flow
 
     expect(app.setup.servers.map(server => server.name)).toEqual(['Imported'])
+})
+
+// The login: the dialog opens by itself when the session waits for a login.
+
+/** A page that can be hidden and shown again. */
+function fakePage(visibilityState: DocumentVisibilityState = 'visible') {
+    const page = Object.assign(new EventTarget(), { visibilityState })
+
+    return {
+        page: page as unknown as PageVisibility,
+        show: () => {
+            page.visibilityState = 'visible'
+            page.dispatchEvent(new Event('visibilitychange'))
+        },
+    }
+}
+
+/** Lets a session's transitions run. */
+async function settled(): Promise<void> {
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+}
+
+function loginApp(page = fakePage().page): { app: App; server: ServerSetup } {
+    const app = new App({
+        storage: new FakeBrowser().open(),
+        makeSession: fakeSessions({ password: 'secret' }),
+        secrets: ALONE,
+        page,
+    })
+    const server = app.setup.addServer({ ...SERVER, login: LOGIN })
+
+    return { app, server }
+}
+
+function loginDialog(app: App): (OpenDialog & { input: LoginDialogInput }) | undefined {
+    return app.dialogs.open.find(dialog => dialog.kind === 'login') as
+        (OpenDialog & { input: LoginDialogInput }) | undefined
+}
+
+test('the login dialog opens by itself when the session waits for a login, and logs in with what is typed', async () => {
+    const { app, server } = loginApp()
+
+    app.activateServer(server.id)
+    await settled()
+
+    const dialog = loginDialog(app)
+
+    expect(app.session?.status.phase).toBe('login-needed')
+    expect(dialog?.input.server.id).toBe(server.id)
+    expect(dialog?.input.reason).toBeUndefined()
+
+    expect(dialog?.input.logIn({ username: LOGIN.username, password: 'wrong' }, false)).rejects.toThrow('Invalid login')
+    await settled()
+    expect(loginDialog(app)).toBe(dialog)
+
+    await dialog?.input.logIn({ username: LOGIN.username, password: 'secret' }, false)
+    await settled()
+
+    expect(app.session?.status.phase).toBe('ready')
+    expect(app.secrets.held(server.id)).toBe('secret')
+    expect(app.setup.server(server.id)?.login?.remember).toBe(false)
+})
+
+test('a password remembered from the login dialog goes into the setup, and the session stays', async () => {
+    const { app, server } = loginApp()
+
+    app.activateServer(server.id)
+    await settled()
+
+    const session = app.session
+
+    await loginDialog(app)?.input.logIn({ username: LOGIN.username, password: 'secret' }, true)
+    await settled()
+
+    expect(app.session).toBe(session)
+    expect(app.session?.status.phase).toBe('ready')
+    expect(app.setup.server(server.id)?.login).toMatchObject({ remember: true, password: 'secret' })
+    expect(app.secrets.has(server.id)).toBe(false)
+})
+
+test('the login dialog, once cancelled, does not open by itself again for the session', async () => {
+    const { app, server } = loginApp()
+
+    app.activateServer(server.id)
+    await settled()
+    loginDialog(app)?.cancel()
+    await settled()
+
+    // A refusal brings the session back to waiting: still no dialog
+    await expect(app.session?.login({ username: LOGIN.username, password: 'wrong' })).rejects.toThrow()
+    await settled()
+    expect(loginDialog(app)).toBeUndefined()
+
+    // Asked for, it opens, with the reason of the refusal
+    void app.logIn()
+    expect(loginDialog(app)?.input.reason).toBe('Invalid login')
+
+    // A new session opens it by itself again
+    loginDialog(app)?.cancel()
+    app.activateServer(server.id)
+    await settled()
+    expect(loginDialog(app)).toBeDefined()
+})
+
+test('after logOut() the login dialog does not open by itself', async () => {
+    const { app, server } = loginApp()
+
+    app.activateServer(server.id)
+    await settled()
+    await loginDialog(app)?.input.logIn({ username: LOGIN.username, password: 'secret' }, false)
+    await settled()
+
+    await app.logOut()
+    await settled()
+
+    expect(app.session?.status.phase).toBe('login-needed')
+    expect(loginDialog(app)).toBeUndefined()
+})
+
+test('the login dialog goes by itself when the session logs in without it, or ends', async () => {
+    const { app, server } = loginApp()
+
+    app.activateServer(server.id)
+    await settled()
+    expect(loginDialog(app)).toBeDefined()
+
+    // A password typed in another window, or remembered meanwhile
+    app.secrets.set(server.id, 'secret')
+    await settled()
+    expect(app.session?.status.phase).toBe('ready')
+    expect(loginDialog(app)).toBeUndefined()
+
+    await app.logOut()
+    void app.logIn()
+    expect(loginDialog(app)).toBeDefined()
+    app.deactivate()
+    expect(loginDialog(app)).toBeUndefined()
+})
+
+test('in a hidden page the login dialog waits until the page is shown', async () => {
+    const { page, show } = fakePage('hidden')
+    const { app, server } = loginApp(page)
+
+    app.activateServer(server.id)
+    await settled()
+    expect(app.session?.status.phase).toBe('login-needed')
+    expect(loginDialog(app)).toBeUndefined()
+
+    show()
+    expect(loginDialog(app)).toBeDefined()
+})
+
+test('remembering a password, or changing the one remembered, does not replace the session', async () => {
+    const { app, log } = flowApp()
+    const server = app.setup.addServer({ ...SERVER, login: LOGIN })
+
+    app.activateServer(server.id)
+    log.length = 0
+
+    app.setup.updateServer(server.id, { login: { ...LOGIN, remember: true, password: 'one' } })
+    app.setup.updateServer(server.id, { login: { ...LOGIN, remember: true, password: 'two' } })
+    app.setup.updateServer(server.id, { login: LOGIN })
+
+    expect(log).toEqual([])
 })

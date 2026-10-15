@@ -5,6 +5,7 @@ import { useApp } from '../app/app.ts'
 import type { ServerSetup } from '../app/setup.ts'
 import { UiButton, UiSelect } from '../widgets/index.ts'
 import AppIcon from './AppIcon.vue'
+import SessionStatus from './SessionStatus.vue'
 
 const app = useApp()
 const setup = app.setup
@@ -70,8 +71,7 @@ function chooseService(id: string): void {
                     <AppIcon name="gear" />
                 </UiButton>
             </div>
-            <!-- The session's state, once there is a session to have one. -->
-            <p class="side-bar-status"><span class="side-bar-dot" />Not connected</p>
+            <SessionStatus v-if="setup.currentServerId !== null" />
         </section>
 
         <section v-if="setup.currentServerId !== null" class="side-bar-part side-bar-services">
@@ -177,22 +177,6 @@ function chooseService(id: string): void {
     flex: none;
     width: var(--ui-control);
     padding: 0;
-}
-
-.side-bar-status {
-    display: flex;
-    align-items: center;
-    gap: 0.5em;
-    margin: 0;
-    color: var(--ui-muted);
-    font-size: 0.86em;
-}
-
-.side-bar-dot {
-    width: 0.6em;
-    height: 0.6em;
-    border: 1px solid var(--ui-muted);
-    border-radius: 50%;
 }
 
 .side-bar-list {

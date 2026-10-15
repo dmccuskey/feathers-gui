@@ -226,3 +226,22 @@ test('a lookup under way when the window ends gets none, and nothing is sent aft
     expect(await asked).toBeUndefined()
     expect(() => first!.set('one', 'first')).not.toThrow()
 })
+
+test('what listens is told of a secret set in this window or another, and not of one forgotten', async () => {
+    const shared = browser()
+    const [here, there] = [shared.open(), shared.open()]
+    const told: string[] = []
+    const stop = here.onSet(serverId => told.push(serverId))
+
+    here.set('local', 'typed')
+    there.set('other', 'typed')
+    await Bun.sleep(5)
+    here.forget('local')
+    here.set('local', '')
+
+    expect(told).toEqual(['local', 'other'])
+
+    stop()
+    here.set('local', 'again')
+    expect(told).toEqual(['local', 'other'])
+})

@@ -153,3 +153,49 @@ test('"Info" opens the dialog that says what the app is', async () => {
     expect(app.dialogs.open.map(dialog => dialog.kind)).toEqual(['info'])
     expect(wrapper.find('dialog').text()).toContain('Feathersjs server')
 })
+
+test('a server with a login asks for the password, says why it was refused, and shows as whom it is connected', async () => {
+    const { app, wrapper } = mountApp({ password: 'secret', services: { things: [] } })
+    const server = app.setup.addServer({
+        name: 'local',
+        url: 'http://local.test',
+        readOnly: false,
+        login: {
+            kind: 'local',
+            path: 'authentication',
+            usernameField: 'email',
+            passwordField: 'password',
+            username: 'ada@example.com',
+            remember: false,
+        },
+    })
+
+    app.activateServer(server.id)
+    app.setup.setCurrentService(server.id, addService(app, server, 'things').id)
+    await flushPromises()
+
+    expect(wrapper.find('.session-status').text()).toContain('Not logged in.')
+    expect(wrapper.find('.service-area-empty').text()).toContain('Log in to read this server')
+
+    const dialog = wrapper.find('dialog')
+    const [username, password] = dialog.findAll('input')
+
+    expect(username?.element.value).toBe('ada@example.com')
+    expect(username?.attributes('autocomplete')).toBe('username')
+    expect(password?.attributes('autocomplete')).toBe('current-password')
+
+    await password?.setValue('wrong')
+    await dialog.find('form').trigger('submit')
+    await Bun.sleep(20)
+
+    expect(wrapper.find('dialog').text()).toContain('Invalid login')
+    expect(wrapper.find('dialog input[type="password"]').element).toHaveProperty('value', '')
+
+    await wrapper.find('dialog input[type="password"]').setValue('secret')
+    await wrapper.find('dialog form').trigger('submit')
+    await flushPromises()
+
+    expect(wrapper.find('dialog').exists()).toBe(false)
+    expect(wrapper.find('.session-status').text()).toContain('Connected as ada@example.com')
+    expect(wrapper.find('.service-area-status').text()).toBe('No records.')
+})

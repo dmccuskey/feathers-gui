@@ -70,9 +70,15 @@ watch(
         <!-- The service view comes here. -->
         <template v-else>
             <h2 class="service-area-path">{{ service.path }}</h2>
-            <p v-if="status?.error" class="service-area-notice" role="alert">{{ status.error.message }}</p>
+            <p v-if="status?.error && status.phase !== 'login-needed'" class="service-area-notice" role="alert">
+                {{ status.error.message }}
+            </p>
             <p v-else-if="failure" class="service-area-notice" role="alert">{{ failure }}</p>
             <p v-else-if="status?.phase === 'connecting'" class="service-area-status">Connecting…</p>
+            <div v-else-if="status?.phase === 'login-needed'" class="service-area-empty">
+                <p>Log in to read this server's records.</p>
+                <UiButton variant="primary" @click="app.logIn()">Log In</UiButton>
+            </div>
             <p v-else-if="!records" class="service-area-status">Loading…</p>
             <p v-else-if="records.length === 0" class="service-area-status">No records.</p>
             <ol v-else class="service-area-records">

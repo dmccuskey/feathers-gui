@@ -3,7 +3,7 @@
 // over the reading.
 import { FeathersConnection, type AuthenticationRequest } from '@dmccuskey/feathers-connect'
 import { StateMachine } from 'micro-fsm'
-import { shallowRef } from 'vue'
+import { shallowRef, watch } from 'vue'
 import type { Secrets } from './secrets.ts'
 import type { LoginSetup, ServerSetup, Setup } from './setup.ts'
 
@@ -172,6 +172,20 @@ export class Session {
                 this.#error = { message: error.message }
                 this.#publish()
             }),
+            // A secret that comes while the session waits for one: typed in another window, or remembered
+            this.#secrets.onSet(serverId => {
+                if (serverId === this.serverId) this.#secretArrived()
+            }),
+            watch(
+                () => {
+                    const login = this.#loginSetup()
+
+                    return login?.remember ? login.password : undefined
+                },
+                password => {
+                    if (password !== undefined) this.#secretArrived()
+                },
+            ),
         ]
     }
 
@@ -364,6 +378,15 @@ export class Session {
     /** The server's login as it is set up now. */
     #loginSetup(): LoginSetup | undefined {
         return this.#setup.server(this.serverId)?.login
+    }
+
+    /** Logs in with a new secret, when the session waits for one and the user did not log out. */
+    #secretArrived(): void {
+        if (this.#machine.state !== 'login-needed' || this.#wanted !== 'login-needed' || this.#isLoggedOut) return
+
+        // What the server last accepted, kept after a login that was not answered, is older
+        this.#credentials = undefined
+        this.#want('logging-in')
     }
 
     /** Leaving `logging-in`: what the login under way ends with is ignored. */
