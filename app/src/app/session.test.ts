@@ -1,18 +1,49 @@
 import { expect, test } from 'bun:test'
 import { FakeBrowser } from '../../test-support/fake-browser.ts'
-import { fakeConnection, type FakeConnection, type FakeConnectionOptions } from '../../test-support/fake-connection.ts'
+import {
+    fakeConnection,
+    serverError,
+    type FakeConnection,
+    type FakeConnectionOptions,
+} from '../../test-support/fake-connection.ts'
 import { Secrets } from './secrets.ts'
 import { Session } from './session.ts'
-import { Setup } from './setup.ts'
+import { Setup, type LoginSetup } from './setup.ts'
 
-function makeSession(options: FakeConnectionOptions = {}): { session: Session; connection: FakeConnection } {
+interface Made {
+    session: Session
+    connection: FakeConnection
+    secrets: Secrets
+}
+
+/** A session with a fake connection. `login`: the server's login, as set up. */
+function makeSession(options: FakeConnectionOptions = {}, login?: Partial<LoginSetup>): Made {
     const setup = new Setup(new FakeBrowser().open())
-    const server = setup.addServer({ name: 'Local', url: 'http://localhost:3041', readOnly: false })
+    const server = setup.addServer({
+        name: 'Local',
+        url: 'http://localhost:3041',
+        readOnly: false,
+        ...(login
+            ? {
+                  login: {
+                      kind: 'local',
+                      path: 'authentication',
+                      usernameField: 'email',
+                      passwordField: 'password',
+                      username: 'ada@example.com',
+                      remember: false,
+                      ...login,
+                  },
+              }
+            : {}),
+    })
     const connection = fakeConnection(options)
+    const secrets = new Secrets()
 
     return {
-        session: new Session(server, { setup, secrets: new Secrets(), makeConnection: () => connection }),
+        session: new Session(server, { setup, secrets, makeConnection: () => connection, loginWait: 20 }),
         connection,
+        secrets,
     }
 }
 
@@ -188,4 +219,201 @@ test('an answer that is not records rejects', async () => {
     await session.open()
 
     expect(session.firstPage('odd')).rejects.toThrow('The service "odd" did not answer with records')
+})
+
+test('a session logs in with the password remembered, and is ready as the user', async () => {
+    const { session, connection } = makeSession({ password: 'secret' }, { remember: true, password: 'secret' })
+
+    await session.open()
+
+    expect(connection.logins).toEqual([{ strategy: 'local', email: 'ada@example.com', password: 'secret' }])
+    expect(session.status).toEqual({ phase: 'ready', attempts: 0, user: { email: 'ada@example.com' } })
+})
+
+test('a login sends the username and password under the field names set up', async () => {
+    const { session, connection } = makeSession(
+        { password: 'secret' },
+        { usernameField: 'username', passwordField: 'pass', username: 'ada', remember: true, password: 'secret' },
+    )
+
+    await session.open()
+
+    expect(connection.logins).toEqual([{ strategy: 'local', username: 'ada', pass: 'secret' }])
+})
+
+test('a login of kind token sends the token by the jwt strategy', async () => {
+    const { session, connection, secrets } = makeSession({ password: 'eyJ' }, { kind: 'token' })
+
+    secrets.set(session.serverId, 'eyJ')
+    await session.open()
+
+    expect(connection.logins).toEqual([{ strategy: 'jwt', accessToken: 'eyJ' }])
+    expect(session.status.phase).toBe('ready')
+})
+
+test('with no password in hand, the session waits for login(), and holds the password once accepted', async () => {
+    const { session, connection, secrets } = makeSession({ password: 'secret' }, {})
+
+    await session.open()
+    expect(session.status).toEqual({ phase: 'login-needed', attempts: 0 })
+    expect(connection.logins).toEqual([])
+
+    await session.login({ username: 'grace@example.com', password: 'secret' })
+
+    expect(session.status).toEqual({ phase: 'ready', attempts: 0, user: { email: 'grace@example.com' } })
+    expect(secrets.get(session.serverId)).toBe('secret')
+})
+
+test('a password refused rejects login(), and the session waits for another', async () => {
+    const { session, secrets } = makeSession({ password: 'secret' }, {})
+
+    await session.open()
+
+    expect(session.login({ username: 'ada@example.com', password: 'wrong' })).rejects.toThrow('Invalid login')
+    await settled()
+    expect(session.status).toEqual({
+        phase: 'login-needed',
+        error: { message: 'Invalid login', code: 401 },
+        attempts: 0,
+    })
+    expect(secrets.has(session.serverId)).toBe(false)
+
+    await session.login({ username: 'ada@example.com', password: 'secret' })
+    expect(session.status.phase).toBe('ready')
+})
+
+test('a password held for the window that is refused is forgotten', async () => {
+    const { session, secrets } = makeSession({ password: 'secret' }, {})
+
+    secrets.set(session.serverId, 'old')
+    await session.open()
+
+    expect(session.status.phase).toBe('login-needed')
+    expect(session.status.error).toEqual({ message: 'Invalid login', code: 401 })
+    expect(secrets.has(session.serverId)).toBe(false)
+})
+
+test('a login that fails without a refusal keeps the password, and waits for login()', async () => {
+    const { session, connection, secrets } = makeSession({ password: 'secret', manualLogin: true }, {})
+
+    secrets.set(session.serverId, 'secret')
+    void session.open()
+    await settled()
+    expect(session.status.phase).toBe('logging-in')
+
+    connection.failLogin(new Error('operation has timed out'))
+    await settled()
+    expect(session.status).toEqual({
+        phase: 'login-needed',
+        error: { message: 'operation has timed out' },
+        attempts: 0,
+    })
+    expect(secrets.get(session.serverId)).toBe('secret')
+})
+
+test('a lost connection comes back logged in by the connection itself', async () => {
+    const { session, connection } = makeSession({ password: 'secret' }, { remember: true, password: 'secret' })
+
+    await session.open()
+    connection.drop()
+    await settled()
+    expect(session.status.phase).toBe('lost')
+
+    connection.accept()
+    await settled()
+    expect(session.status.phase).toBe('ready')
+    expect(connection.logins).toHaveLength(1)
+})
+
+test('a token that runs out is replaced by logging in again with the password held', async () => {
+    const { session, connection } = makeSession({ password: 'secret' }, {})
+
+    await session.open()
+    await session.login({ username: 'ada@example.com', password: 'secret' })
+
+    connection.expireToken()
+    await settled()
+
+    expect(session.status.phase).toBe('ready')
+    expect(connection.logins).toEqual([
+        { strategy: 'local', email: 'ada@example.com', password: 'secret' },
+        { strategy: 'local', email: 'ada@example.com', password: 'secret' },
+    ])
+})
+
+test('a login again that is never answered is followed by one of the session own, once the wait is over', async () => {
+    const { session, connection } = makeSession(
+        { password: 'secret', silentRelogin: true },
+        { remember: true, password: 'secret' },
+    )
+
+    await session.open()
+    connection.drop()
+    connection.accept()
+    await settled()
+    expect(session.status.phase).toBe('logging-in')
+
+    await Bun.sleep(30)
+    await settled()
+    expect(session.status.phase).toBe('ready')
+    expect(connection.logins).toHaveLength(2)
+})
+
+test('a connection lost while logging in logs in once it is back', async () => {
+    const { session, connection, secrets } = makeSession({ password: 'secret', manualLogin: true }, {})
+
+    secrets.set(session.serverId, 'secret')
+    void session.open()
+    await settled()
+    connection.drop()
+    connection.failLogin(new Error('disconnected'))
+    await settled()
+    expect(session.status.phase).toBe('lost')
+
+    connection.accept()
+    await settled()
+    connection.answerLogin()
+    await settled()
+    expect(session.status.phase).toBe('ready')
+    expect(connection.logins).toHaveLength(2)
+})
+
+test('after logout() the session waits for login(), also when the connection comes back', async () => {
+    const { session, connection, secrets } = makeSession({ password: 'secret' }, { remember: true, password: 'secret' })
+
+    await session.open()
+    secrets.set(session.serverId, 'secret')
+    await session.logout()
+    await settled()
+
+    expect(session.status).toEqual({ phase: 'login-needed', attempts: 0 })
+    expect(connection.logouts).toBe(1)
+    expect(secrets.has(session.serverId)).toBe(false)
+
+    connection.drop()
+    connection.accept()
+    await settled()
+    expect(session.status.phase).toBe('login-needed')
+    expect(connection.logins).toHaveLength(1)
+})
+
+test('login() is refused by a server without a login, and while connecting', async () => {
+    expect(makeSession().session.login({ token: 'eyJ' })).rejects.toThrow('The server has no login')
+
+    const { session } = makeSession({ manual: true }, {})
+
+    void session.open()
+    await settled()
+    expect(session.login({ token: 'eyJ' })).rejects.toThrow('The session cannot log in while connecting')
+})
+
+test('a login waiting when the session is destroyed rejects', async () => {
+    const { session } = makeSession({ password: 'secret', manualLogin: true }, {})
+
+    await session.open()
+
+    const login = session.login({ username: 'ada@example.com', password: 'secret' })
+
+    session.destroy()
+    expect(login).rejects.toThrow('The session was closed')
 })

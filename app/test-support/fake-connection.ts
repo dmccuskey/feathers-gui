@@ -1,5 +1,7 @@
 // A connection for a test. It connects at once, or fails with `error`, or, with `manual`, waits for the test to say
-// what the server does. Its services answer a `find` with what is given.
+// what the server does. Its services answer a `find` with what is given. With `password` it has a login, and logs
+// in again by itself with its token each time it connects, as a `FeathersConnection` does.
+import type { AuthenticationRequest, AuthenticationResult } from '@dmccuskey/feathers-connect'
 import { Session, type SessionConnection, type SessionParts } from '../src/app/session.ts'
 import type { ServerSetup } from '../src/app/setup.ts'
 
@@ -10,10 +12,21 @@ export interface FakeConnectionOptions {
     error?: Error
     /** Whether `connect()` waits for `accept()`, `refuse()` or `failAttempt()`, as one that keeps trying. */
     manual?: boolean
+    /** The secret the server accepts to log in, a password or a token, with any username. */
+    password?: string
+    /** Whether a login waits for `answerLogin()` or `failLogin()`. */
+    manualLogin?: boolean
+    /** Whether logging in again with the token, as the connection is made, is never answered. */
+    silentRelogin?: boolean
 }
 
 type Listener = () => void
 type ErrorListener = (error: Error) => void
+
+/** An error of the server's, with its code, as Feathers sends it. */
+export function serverError(message: string, code: number): Error {
+    return Object.assign(new Error(message), { code })
+}
 
 export class FakeConnection implements SessionConnection {
     readonly #options: FakeConnectionOptions
@@ -21,10 +34,18 @@ export class FakeConnection implements SessionConnection {
     readonly #disconnected = new Set<Listener>()
     readonly #connectErrors = new Set<ErrorListener>()
     #pending: { resolve: () => void; reject: (error: Error) => void } | undefined
+    readonly #authenticated = new Set<Listener>()
+    readonly #authenticationLost = new Set<ErrorListener>()
+    #pendingLogin: { request: AuthenticationRequest; resolve: () => void; reject: (error: Error) => void } | undefined
     #isConnected = false
+    #isTokenKept = false
     /** How many times `connect()` and `disconnect()` were called. */
     connects = 0
     disconnects = 0
+    /** What each `authenticate()` sent. */
+    logins: AuthenticationRequest[] = []
+    logouts = 0
+    user: Record<string, unknown> | undefined
 
     constructor(options: FakeConnectionOptions = {}) {
         this.#options = options
@@ -56,6 +77,7 @@ export class FakeConnection implements SessionConnection {
         this.#isConnected = true
         this.#settle()
         for (const listener of this.#connected) listener()
+        if (this.#isTokenKept && !this.#options.silentRelogin) this.#loggedIn()
     }
 
     /** An attempt to connect fails, and the connection keeps trying. */
@@ -73,6 +95,51 @@ export class FakeConnection implements SessionConnection {
     drop(): void {
         this.#isConnected = false
         for (const listener of this.#disconnected) listener()
+    }
+
+    async authenticate(request: AuthenticationRequest): Promise<AuthenticationResult> {
+        this.logins.push(request)
+        if (this.#options.manualLogin) {
+            await new Promise<void>((resolve, reject) => (this.#pendingLogin = { request, resolve, reject }))
+        }
+
+        const secret = request.strategy === 'jwt' ? request.accessToken : request.password
+
+        if (secret !== this.#options.password) throw serverError('Invalid login', 401)
+
+        const user = { email: request.email }
+
+        this.#loggedIn(user)
+
+        return { accessToken: 'a token', user }
+    }
+
+    /** The server answers the login waiting, accepting or refusing it by its secret. */
+    answerLogin(): void {
+        this.#pendingLogin?.resolve()
+        this.#pendingLogin = undefined
+    }
+
+    /** The login waiting fails without an answer of the server's. */
+    failLogin(error: Error): void {
+        this.#pendingLogin?.reject(error)
+        this.#pendingLogin = undefined
+    }
+
+    async logout(): Promise<void> {
+        this.logouts++
+        this.#isTokenKept = false
+        this.user = undefined
+    }
+
+    /** The token runs out: the server closes the socket, it connects again, and the token is refused. */
+    expireToken(): void {
+        this.drop()
+        this.#isTokenKept = false
+        this.user = undefined
+        this.#isConnected = true
+        for (const listener of this.#connected) listener()
+        for (const listener of this.#authenticationLost) listener(serverError('jwt expired', 401))
     }
 
     service: SessionConnection['service'] = path => {
@@ -108,6 +175,20 @@ export class FakeConnection implements SessionConnection {
 
     onConnectError(listener: ErrorListener): () => void {
         return on(this.#connectErrors, listener)
+    }
+
+    onAuthenticated(listener: Listener): () => void {
+        return on(this.#authenticated, listener)
+    }
+
+    onAuthenticationLost(listener: ErrorListener): () => void {
+        return on(this.#authenticationLost, listener)
+    }
+
+    #loggedIn(user = this.user): void {
+        this.#isTokenKept = true
+        this.user = user
+        for (const listener of this.#authenticated) listener()
     }
 
     #settle(error?: Error): void {
