@@ -3,7 +3,7 @@
 // components, which get it by `useApp()`.
 import { effectScope, inject, shallowRef, watch, type InjectionKey } from 'vue'
 import { Dialogs } from './dialogs.ts'
-import { Secrets } from './secrets.ts'
+import { Secrets, type SecretsOptions } from './secrets.ts'
 import { Session, type SessionParts } from './session.ts'
 import {
     Setup,
@@ -58,6 +58,8 @@ export interface AppOptions {
     storage?: SetupOptions
     /** Makes the session with a server. Default: a `Session`. */
     makeSession?: (server: ServerSetup, parts: SessionParts) => Session
+    /** How the secrets are shared with the other windows. Default: over the app's `BroadcastChannel`. */
+    secrets?: SecretsOptions
 }
 
 /** The key the app is provided under: `vueApp.provide(APP_KEY, app)`. */
@@ -65,7 +67,7 @@ export const APP_KEY: InjectionKey<App> = Symbol('feathers-gui.app')
 
 export class App {
     readonly setup: Setup
-    readonly secrets = new Secrets()
+    readonly secrets: Secrets
     readonly dialogs = new Dialogs<AppDialogs>()
 
     readonly #makeSession: NonNullable<AppOptions['makeSession']>
@@ -74,6 +76,7 @@ export class App {
 
     constructor(options: AppOptions = {}) {
         this.setup = new Setup(options.storage)
+        this.secrets = new Secrets(options.secrets)
         this.#makeSession = options.makeSession ?? ((server, parts) => new Session(server, parts))
 
         this.#scope.run(() => {
@@ -147,7 +150,7 @@ export class App {
 
         if (!before) return
 
-        const held = before.login?.password ?? this.secrets.get(serverId)
+        const held = before.login?.password ?? this.secrets.held(serverId)
         const answer = await this.dialogs.show('server', { server: before, hasSecret: held !== undefined })
 
         if (!answer) return

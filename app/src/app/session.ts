@@ -341,7 +341,7 @@ export class Session {
             this.#sending = undefined
             if (failure.code === 401) {
                 this.#credentials = undefined
-                if (!credentials.isOffered) this.#secrets.forget(this.serverId)
+                if (!credentials.isOffered) this.#secrets.refused(this.serverId, credentials.secret)
             }
             if (credentials.isOffered) this.#offered = undefined
             this.#error = failure
@@ -351,12 +351,12 @@ export class Session {
     }
 
     /**
-     * The secret for the server's login: the one remembered in its setup, or the one typed in this window.
-     * Asynchronous, since the secrets of this window are to be asked of the other windows.
+     * The secret for the server's login: the one remembered in its setup, or the one typed in this window or in
+     * another one, which `Secrets` asks for.
      */
     async #credentialsInHand(): Promise<Credentials | undefined> {
         const login = this.#loginSetup()
-        const secret = (login?.remember ? login.password : undefined) ?? this.#secrets.get(this.serverId)
+        const secret = (login?.remember ? login.password : undefined) ?? (await this.#secrets.get(this.serverId))
 
         return login && secret !== undefined ? { username: login.username, secret } : undefined
     }

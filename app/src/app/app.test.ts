@@ -8,6 +8,8 @@ import { Session, type SessionParts } from './session.ts'
 import { Setup, type ServerSetup } from './setup.ts'
 
 const SERVER: Omit<ServerSetup, 'id'> = { name: 'Local', url: 'http://localhost:3041', readOnly: false }
+// Each test's windows keep their secrets to themselves: one about sharing them says so
+const ALONE = { channel: null }
 
 /** A session that records what the app does with it, and connects to nothing. */
 class LoggedSession extends Session {
@@ -35,6 +37,7 @@ function loggedSessions(window: FakeWindow): { options: AppOptions; log: string[
         log,
         options: {
             storage: window,
+            secrets: ALONE,
             makeSession: (server, parts) => {
                 log.push(`make ${server.name}`)
 
@@ -45,7 +48,7 @@ function loggedSessions(window: FakeWindow): { options: AppOptions; log: string[
 }
 
 test('a new app has its parts, and no session', () => {
-    const app = new App({ storage: new FakeBrowser().open(), makeSession: fakeSessions() })
+    const app = new App({ storage: new FakeBrowser().open(), makeSession: fakeSessions(), secrets: ALONE })
 
     expect(app.setup.servers).toEqual([])
     expect(app.dialogs.open).toEqual([])
@@ -70,6 +73,7 @@ test('the session is given the setup and the secrets of the app', () => {
     const parts: unknown[] = []
     const app = new App({
         storage: window,
+        secrets: ALONE,
         makeSession: (server, given) => {
             parts.push(given)
 
@@ -146,12 +150,12 @@ test('a secret is kept while going to another server and back', () => {
     app.activateServer(other.id)
     app.activateServer(local.id)
 
-    expect(app.secrets.get(local.id)).toBe('typed')
+    expect(app.secrets.held(local.id)).toBe('typed')
 })
 
 test('the secret of a server goes when the server is removed, in this window or another', () => {
     const browser = new FakeBrowser()
-    const app = new App({ storage: browser.open(), makeSession: fakeSessions() })
+    const app = new App({ storage: browser.open(), makeSession: fakeSessions(), secrets: ALONE })
     const elsewhere = new Setup(browser.open())
     const local = app.setup.addServer(SERVER)
     const other = app.setup.addServer({ ...SERVER, name: 'Other' })
@@ -204,7 +208,7 @@ test('createGuiApp() starts with no session when no server was current', () => {
 
 test('createGuiApp() activates the server that was current in this window', () => {
     const window = new FakeBrowser().open()
-    const before = new App({ storage: window, makeSession: fakeSessions() })
+    const before = new App({ storage: window, makeSession: fakeSessions(), secrets: ALONE })
     const server = before.setup.addServer(SERVER)
     before.activateServer(server.id)
     before.destroy()
@@ -218,7 +222,7 @@ test('createGuiApp() activates the server that was current in this window', () =
 
 test('createGuiApp() in a new window activates the server used last in any window', () => {
     const browser = new FakeBrowser()
-    const first = new App({ storage: browser.open(), makeSession: fakeSessions() })
+    const first = new App({ storage: browser.open(), makeSession: fakeSessions(), secrets: ALONE })
     const server = first.setup.addServer(SERVER)
     first.activateServer(server.id)
 
@@ -228,7 +232,7 @@ test('createGuiApp() in a new window activates the server used last in any windo
 })
 
 test('useApp() gives a component the app that is provided', () => {
-    const app = new App({ storage: new FakeBrowser().open(), makeSession: fakeSessions() })
+    const app = new App({ storage: new FakeBrowser().open(), makeSession: fakeSessions(), secrets: ALONE })
     let found: App | undefined
     const Reader = defineComponent({
         setup() {
@@ -319,7 +323,7 @@ test('a password is held in memory, and in the setup only when it is to be remem
 
     const id = app.setup.servers[0]?.id as string
 
-    expect(app.secrets.get(id)).toBe('hunter2')
+    expect(app.secrets.held(id)).toBe('hunter2')
     expect(app.setup.server(id)?.login?.password).toBeUndefined()
 
     // "Remember" turned on with nothing typed: the password in hand moves to the setup.
@@ -338,7 +342,7 @@ test('a password is held in memory, and in the setup only when it is to be remem
     await flow
 
     expect(app.setup.server(id)?.login?.password).toBeUndefined()
-    expect(app.secrets.get(id)).toBe('hunter2')
+    expect(app.secrets.held(id)).toBe('hunter2')
 
     // Another kind of login: the password is nothing to it.
     flow = app.editServer(id)
@@ -452,7 +456,7 @@ test('a service is added to the current server, the first made current, and edit
 test('an import asks how when something is set up, and says so when the file is no setup', async () => {
     const { app } = flowApp()
     const exported = (() => {
-        const other = new App({ storage: new FakeBrowser().open(), makeSession: fakeSessions() })
+        const other = new App({ storage: new FakeBrowser().open(), makeSession: fakeSessions(), secrets: ALONE })
 
         other.setup.addServer({ ...SERVER, name: 'Imported' })
 

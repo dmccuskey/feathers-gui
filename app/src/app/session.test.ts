@@ -17,7 +17,11 @@ interface Made {
 }
 
 /** A session with a fake connection. `login`: the server's login, as set up. */
-function makeSession(options: FakeConnectionOptions = {}, login?: Partial<LoginSetup>): Made {
+function makeSession(
+    options: FakeConnectionOptions = {},
+    login?: Partial<LoginSetup>,
+    secrets = new Secrets({ channel: null }),
+): Made {
     const setup = new Setup(new FakeBrowser().open())
     const server = setup.addServer({
         name: 'Local',
@@ -38,7 +42,6 @@ function makeSession(options: FakeConnectionOptions = {}, login?: Partial<LoginS
             : {}),
     })
     const connection = fakeConnection(options)
-    const secrets = new Secrets()
 
     return {
         session: new Session(server, { setup, secrets, makeConnection: () => connection, loginWait: 20 }),
@@ -261,7 +264,7 @@ test('with no password in hand, the session waits for login(), and holds the pas
     await session.login({ username: 'grace@example.com', password: 'secret' })
 
     expect(session.status).toEqual({ phase: 'ready', attempts: 0, user: { email: 'grace@example.com' } })
-    expect(secrets.get(session.serverId)).toBe('secret')
+    expect(secrets.held(session.serverId)).toBe('secret')
 })
 
 test('a password refused rejects login(), and the session waits for another', async () => {
@@ -293,6 +296,42 @@ test('a password held for the window that is refused is forgotten', async () => 
     expect(secrets.has(session.serverId)).toBe(false)
 })
 
+test('a session in a new window logs in with the password typed in another', async () => {
+    const channel = `test:${crypto.randomUUID()}`
+    const other = new Secrets({ channel, askWait: 30 })
+    const { session, connection, secrets } = makeSession(
+        { password: 'secret' },
+        {},
+        new Secrets({ channel, askWait: 30 }),
+    )
+
+    other.set(session.serverId, 'secret')
+    await session.open()
+
+    expect(connection.logins).toEqual([{ strategy: 'local', email: 'ada@example.com', password: 'secret' }])
+    expect(session.status.phase).toBe('ready')
+    session.destroy()
+    secrets.destroy()
+    other.destroy()
+})
+
+test('a password refused is forgotten in the other windows too', async () => {
+    const channel = `test:${crypto.randomUUID()}`
+    const other = new Secrets({ channel, askWait: 30 })
+    const { session, secrets } = makeSession({ password: 'secret' }, {}, new Secrets({ channel, askWait: 30 }))
+
+    other.set(session.serverId, 'old')
+    await session.open()
+    await Bun.sleep(5)
+
+    expect(session.status.phase).toBe('login-needed')
+    expect(secrets.has(session.serverId)).toBe(false)
+    expect(other.has(session.serverId)).toBe(false)
+    session.destroy()
+    secrets.destroy()
+    other.destroy()
+})
+
 test('a login that fails without a refusal keeps the password, and waits for login()', async () => {
     const { session, connection, secrets } = makeSession({ password: 'secret', manualLogin: true }, {})
 
@@ -308,7 +347,7 @@ test('a login that fails without a refusal keeps the password, and waits for log
         error: { message: 'operation has timed out' },
         attempts: 0,
     })
-    expect(secrets.get(session.serverId)).toBe('secret')
+    expect(secrets.held(session.serverId)).toBe('secret')
 })
 
 test('a lost connection comes back logged in by the connection itself', async () => {

@@ -9,7 +9,11 @@ import { THEMING_KEY, Theming } from '../widgets/index.ts'
 import App from './App.vue'
 
 function mountApp(connection: FakeConnectionOptions = {}) {
-    const app = new GuiApp({ storage: new FakeBrowser().open(), makeSession: fakeSessions(connection) })
+    const app = new GuiApp({
+        storage: new FakeBrowser().open(),
+        makeSession: fakeSessions(connection),
+        secrets: { channel: null },
+    })
     const theming = new Theming({
         root: document.createElement('div'),
         dark: Object.assign(new EventTarget(), { matches: false }),
