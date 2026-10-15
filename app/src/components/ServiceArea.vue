@@ -70,7 +70,7 @@ watch(
         <!-- The service view comes here. -->
         <template v-else>
             <h2 class="service-area-path">{{ service.path }}</h2>
-            <p v-if="status?.error" class="service-area-notice" role="alert">{{ status.error }}</p>
+            <p v-if="status?.error" class="service-area-notice" role="alert">{{ status.error.message }}</p>
             <p v-else-if="failure" class="service-area-notice" role="alert">{{ failure }}</p>
             <p v-else-if="status?.phase === 'connecting'" class="service-area-status">Connecting…</p>
             <p v-else-if="!records" class="service-area-status">Loading…</p>
