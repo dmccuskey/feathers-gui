@@ -8,6 +8,7 @@ import { Window } from 'happy-dom'
 const DOM_GLOBALS = [
     'window',
     'document',
+    'Document',
     'navigator',
     'Node',
     'Element',
