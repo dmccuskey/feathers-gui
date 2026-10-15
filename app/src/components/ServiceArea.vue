@@ -1,10 +1,9 @@
 <script setup lang="ts">
 // The area of the current service. Until there is one, it says what is missing and offers the way to it. Of the
-// service it shows a first page of records as they are, until there is a service view. The records stay, dimmed,
-// while the connection is being brought back.
-import { computed, shallowRef, watch } from 'vue'
+// service it shows its view's records as they are, read again each time the service is chosen. The records stay,
+// dimmed, while the connection is being brought back.
+import { computed, watch } from 'vue'
 import { useApp } from '../app/app.ts'
-import type { RecordEnvelope } from '../app/session.ts'
 import { UiButton } from '../widgets/index.ts'
 
 const app = useApp()
@@ -19,33 +18,12 @@ const service = computed(() => {
 })
 
 const status = computed(() => app.session?.status)
-const records = shallowRef<readonly RecordEnvelope[] | null>(null)
-const failure = shallowRef<string | null>(null)
+const view = computed(() => (service.value ? app.session?.view(service.value.id) : undefined))
+const records = computed(() => view.value?.records ?? null)
+const failure = computed(() => view.value?.status.error?.message ?? null)
 
-watch(
-    () => [app.session, status.value?.phase, service.value?.path] as const,
-    async ([session, phase, path], before, onCleanup) => {
-        let current = true
-
-        onCleanup(() => (current = false))
-        failure.value = null
-        // Kept through a lost connection and the login again after it, until there are new ones
-        if (session !== before?.[0] || path !== before?.[2] || phase === 'login-needed' || phase === 'closed') {
-            records.value = null
-        }
-
-        if (!session || phase !== 'ready' || path === undefined) return
-
-        try {
-            const page = await session.firstPage(path)
-
-            if (current) records.value = page
-        } catch (error) {
-            if (current) failure.value = error instanceof Error ? error.message : String(error)
-        }
-    },
-    { immediate: true },
-)
+// A view newly shown reads again: the one shown at the start, of a service chosen, or of a new session
+watch(view, shown => void shown?.read(), { immediate: true })
 </script>
 
 <template>

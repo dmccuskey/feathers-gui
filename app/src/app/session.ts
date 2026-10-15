@@ -1,11 +1,11 @@
 // The session with the active server: its connection, and the state machine that says where it stands (ADR 004).
-// It logs in where the server has a login, and reads the first records of a service until the service views take
-// over the reading.
+// It logs in where the server has a login, and keeps a view of each service set up for the server.
 import { FeathersConnection, type AuthenticationRequest } from '@dmccuskey/feathers-connect'
 import { StateMachine } from 'micro-fsm'
 import { shallowRef, watch } from 'vue'
 import type { Secrets } from './secrets.ts'
-import type { LoginSetup, ServerSetup, Setup } from './setup.ts'
+import { ServiceView } from './service-view.ts'
+import type { LoginSetup, ServerSetup, ServiceSetup, Setup } from './setup.ts'
 
 export interface SessionParts {
     setup: Setup
@@ -61,9 +61,6 @@ export interface SessionStatus {
     isRetrying?: boolean
 }
 
-/** How many records `firstPage()` returns at most. */
-export const FIRST_PAGE = 25
-
 /**
  * How long the session waits for the connection to log in again with its token, by default. A login the connection
  * sends that is not answered says nothing, so the session sends one of its own once this has passed. It is longer
@@ -114,6 +111,9 @@ export class Session {
     // Counts the logins started; one that is not the last is ignored when it ends
     #loginCount = 0
     #loginTimer: ReturnType<typeof setTimeout> | undefined
+    // The service views, in the setup's order, with what each was made from
+    readonly #views = shallowRef<readonly ServiceView[]>([])
+    #viewKeys = new Map<string, string>()
 
     constructor(server: ServerSetup, parts: SessionParts) {
         this.serverId = server.id
@@ -192,6 +192,13 @@ export class Session {
                 },
                 password => {
                     if (password !== undefined) this.#secretArrived()
+                },
+            ),
+            watch(
+                () => this.#setup.servicesOf(this.serverId),
+                services => this.#followServices(services),
+                {
+                    immediate: true,
                 },
             ),
         ]
@@ -285,21 +292,13 @@ export class Session {
         this.#publish()
     }
 
-    /**
-     * The first records of a service, as the server orders them. The ID is guessed: `_id`, or else `id`.
-     *
-     * It is read with no query, so what comes is the service's own first page, or all of a service without pages.
-     * Not every server knows `$limit`: one that takes each key of a query for a field answers it with nothing.
-     */
-    async firstPage(path: string): Promise<RecordEnvelope[]> {
-        const answer = await this.#connection.service(path).find()
-        const records = Array.isArray(answer) ? answer : (answer as { data?: unknown } | null)?.data
+    /** Reactive. A view of each service set up for the server, in the setup's order. */
+    get views(): readonly ServiceView[] {
+        return this.#views.value
+    }
 
-        if (!Array.isArray(records)) throw new Error(`The service "${path}" did not answer with records`)
-
-        return records
-            .slice(0, FIRST_PAGE)
-            .map((raw: Record<string, unknown>) => ({ id: String(raw._id ?? raw.id), raw }))
+    view(serviceId: string): ServiceView | undefined {
+        return this.#views.value.find(view => view.serviceId === serviceId)
     }
 
     destroy(): void {
@@ -310,6 +309,37 @@ export class Session {
         this.#want('closed')
 
         for (const unsubscribe of this.#unsubscribe) unsubscribe()
+        for (const view of this.#views.value) view.destroy()
+        this.#views.value = []
+        this.#viewKeys.clear()
+    }
+
+    /**
+     * Keeps a view of each service: a service added gets one, one removed loses it, and one whose path, ID field or
+     * way of loading changed gets a new one in place of the old.
+     */
+    #followServices(services: readonly ServiceSetup[]): void {
+        if (this.#destroyed) return
+
+        const before = new Map(this.#views.value.map(view => [view.serviceId, view]))
+        const keys = new Map(services.map(service => [service.id, viewKey(service)]))
+        const views = services.map(service => {
+            const view = before.get(service.id)
+
+            if (view && this.#viewKeys.get(service.id) === keys.get(service.id)) return view
+
+            const made = new ServiceView(service, this.#connection)
+
+            made.follow(this.#machine.state)
+
+            return made
+        })
+
+        for (const view of before.values()) if (!views.includes(view)) view.destroy()
+        this.#viewKeys = keys
+        if (views.length !== before.size || views.some((view, i) => view !== this.#views.value[i])) {
+            this.#views.value = views
+        }
     }
 
     /** Notes where the session should be, and goes there when no transition is under way. */
@@ -332,6 +362,7 @@ export class Session {
             while (this.#machine.state !== this.#wanted && this.#machine.can(this.#wanted)) {
                 await this.#machine.transition(this.#wanted)
                 this.#publish()
+                for (const view of this.#views.value) view.follow(this.#machine.state)
                 this.#arrive()
             }
         } finally {
@@ -481,6 +512,11 @@ function errorOf(error: unknown): { message: string; code?: number } {
     const code = (error as { code?: unknown } | null)?.code
 
     return { message: messageOf(error), ...(typeof code === 'number' ? { code } : {}) }
+}
+
+/** What a service view is made from: a change of any of it makes a new view. */
+function viewKey(service: ServiceSetup): string {
+    return JSON.stringify([service.path, service.idField ?? null, service.load])
 }
 
 /** A `FeathersConnection` to the server, that keeps trying and knows where the server's login is. */

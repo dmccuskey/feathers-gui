@@ -256,50 +256,6 @@ test('a session destroyed before its transition runs ends closed', async () => {
     expect(connection.disconnects).toBe(1)
 })
 
-test('the first page has each record as the server has it, under its ID as a string', async () => {
-    const { session } = makeSession({
-        services: {
-            messages: [{ id: 1, text: 'one' }],
-            things: [{ _id: 'a', id: 'its own' }],
-        },
-    })
-
-    await session.open()
-
-    expect(await session.firstPage('messages')).toEqual([{ id: '1', raw: { id: 1, text: 'one' } }])
-    expect(await session.firstPage('things')).toEqual([{ id: 'a', raw: { _id: 'a', id: 'its own' } }])
-})
-
-test('the first page of a service the server does not have rejects with the reason', async () => {
-    const { session } = makeSession()
-
-    await session.open()
-
-    expect(session.firstPage('nothing')).rejects.toThrow('Service not found: nothing')
-})
-
-test('the first page is at most 25 records, of a service with pages or without', async () => {
-    const records = Array.from({ length: 40 }, (_, id) => ({ id }))
-    const { session } = makeSession({
-        services: { whole: records, paged: { total: 40, limit: 30, skip: 0, data: records.slice(0, 30) } },
-    })
-
-    await session.open()
-
-    expect((await session.firstPage('whole')).map(record => record.id)).toEqual(
-        Array.from({ length: 25 }, (_, id) => String(id)),
-    )
-    expect(await session.firstPage('paged')).toHaveLength(25)
-})
-
-test('an answer that is not records rejects', async () => {
-    const { session } = makeSession({ services: { odd: { status: 'ok' } } })
-
-    await session.open()
-
-    expect(session.firstPage('odd')).rejects.toThrow('The service "odd" did not answer with records')
-})
-
 test('a session logs in with the password remembered, and is ready as the user', async () => {
     const { session, connection } = makeSession({ password: 'secret' }, { remember: true, password: 'secret' })
 

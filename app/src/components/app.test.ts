@@ -14,8 +14,11 @@ import type { ServerSetup, ServiceSetup } from '../app/setup.ts'
 import { THEMING_KEY, Theming } from '../widgets/index.ts'
 import App from './App.vue'
 
-/** `connection`: the options of each session's fake connection, or the one connection every session uses. */
-function mountApp(connection: FakeConnectionOptions | FakeConnection = {}) {
+/**
+ * `connection`: the options of each session's fake connection, or the one connection every session uses. `before`:
+ * what is done with the app before it is shown, as at a reload.
+ */
+function mountApp(connection: FakeConnectionOptions | FakeConnection = {}, before?: (app: GuiApp) => void) {
     const app = new GuiApp({
         storage: new FakeBrowser().open(),
         makeSession:
@@ -29,6 +32,8 @@ function mountApp(connection: FakeConnectionOptions | FakeConnection = {}) {
         dark: Object.assign(new EventTarget(), { matches: false }),
         storage: new FakeStorage(),
     })
+    before?.(app)
+
     const wrapper = mount(App, {
         global: { provide: { [APP_KEY as symbol]: app, [THEMING_KEY as symbol]: theming } },
     })
@@ -112,6 +117,39 @@ test('the records of the current service are listed as the server has them', asy
     await flushPromises()
 
     expect(wrapper.findAll('.service-area-records li').map(item => item.text())).toEqual(['{"_id":"a","name":"first"}'])
+})
+
+test('the service current at the start is read', async () => {
+    const { wrapper } = mountApp({ services: { things: [{ _id: 'a' }] } }, app => {
+        const server = addServer(app, 'local')
+
+        app.activateServer(server.id)
+        app.setup.setCurrentService(server.id, addService(app, server, 'things').id)
+    })
+
+    await flushPromises()
+    expect(wrapper.findAll('.service-area-records li').map(item => item.text())).toEqual(['{"_id":"a"}'])
+})
+
+test('a service chosen again is read again', async () => {
+    const services: Record<string, unknown> = { things: [{ _id: 'a' }], messages: [{ id: 1 }] }
+    const { app, wrapper } = mountApp({ services })
+    const server = addServer(app, 'local')
+    const things = addService(app, server, 'things')
+    const messages = addService(app, server, 'messages')
+    const listed = () => wrapper.findAll('.service-area-records li').map(item => item.text())
+
+    app.activateServer(server.id)
+    app.setup.setCurrentService(server.id, things.id)
+    await flushPromises()
+    expect(listed()).toEqual(['{"_id":"a"}'])
+
+    services.things = [{ _id: 'b' }]
+    app.setup.setCurrentService(server.id, messages.id)
+    await flushPromises()
+    app.setup.setCurrentService(server.id, things.id)
+    await flushPromises()
+    expect(listed()).toEqual(['{"_id":"b"}'])
 })
 
 test('a service the server refuses shows the reason', async () => {
