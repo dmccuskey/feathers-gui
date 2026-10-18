@@ -1,7 +1,7 @@
 // The session with the active server: its connection, and the state machine that says where it stands (ADR 004).
 // It logs in where the server has a login, and keeps a view of each service set up for the server.
 import { FeathersConnection, type AuthenticationRequest } from '@dmccuskey/feathers-connect'
-import { StateMachine } from 'micro-fsm'
+import { StateMachine } from '@dmccuskey/micro-fsm'
 import { shallowRef, watch } from 'vue'
 import type { Secrets } from './secrets.ts'
 import { ServiceView } from './service-view.ts'

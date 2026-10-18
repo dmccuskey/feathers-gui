@@ -7,13 +7,14 @@
         "dev": "bun --bun vite",
         "build": "bun --bun vite build",
         "preview": "bun --bun vite preview",
+        "e2e": "cd e2e && bun test ./*.e2e.ts",
         "typecheck": "bun scripts/typecheck.ts --noEmit",
         "lint": "bun --bun prettier --check .",
         "format": "bun --bun prettier --write ."
     },
     "dependencies": {
-        "@dmccuskey/feathers-connect": "link:feathers-connect",
-        "micro-fsm": "link:micro-fsm",
+        "@dmccuskey/feathers-connect": "link:@dmccuskey/feathers-connect",
+        "@dmccuskey/micro-fsm": "link:@dmccuskey/micro-fsm",
         "vue": "^3.5.43"
     },
     "devDependencies": {
@@ -22,6 +23,7 @@
         "@vue/compiler-sfc": "^3.5.43",
         "@vue/test-utils": "^2.5.1",
         "happy-dom": "^20.14.5",
+        "playwright": "^1.64.1",
         "prettier": "^3.6.0",
         "typescript": "^5.9.0",
         "vite": "^8.3.2",

@@ -1,0 +1,2 @@
+# The end-to-end tests run in Bun with no DOM of their own: the preload of the unit tests is not used here.
+[test]
