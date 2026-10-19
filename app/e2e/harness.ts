@@ -14,9 +14,9 @@ export const DEV_SERVER_DIR = resolve(process.env.DEV_SERVER_DIR ?? resolve(APP_
 /** The seeded user of the dev server. */
 export const USER = { email: 'test@example.com', password: 'test-password' }
 
-/** Ports of their own, away from the app's 9093 and 9094 and the dev server's 3041. */
-export const APP_PORT = Number(process.env.E2E_APP_PORT ?? 9095)
-export const SERVER_PORT = Number(process.env.E2E_SERVER_PORT ?? 3042)
+/** Ports of their own, at the top of the project's throwaway ports (38040 to 38049), away from a second copy of the app on 38042. */
+export const APP_PORT = Number(process.env.E2E_APP_PORT ?? 38048)
+export const SERVER_PORT = Number(process.env.E2E_SERVER_PORT ?? 38049)
 
 export const APP_URL = `http://localhost:${APP_PORT}`
 export const SERVER_URL = `http://localhost:${SERVER_PORT}`
