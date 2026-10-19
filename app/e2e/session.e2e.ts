@@ -193,7 +193,7 @@ test('a lost connection keeps the records dimmed, and Try Now brings the session
     expect(await page.getByRole('dialog').count()).toBe(0)
 }, 40_000)
 
-test('a token that runs out is replaced by the session's own login, and the records are still read', async () => {
+test("a token that runs out is replaced by the session's own login, and the records are still read", async () => {
     await server.stop()
     server = await startServer({ TOKEN_LIFE: '3s' })
 
