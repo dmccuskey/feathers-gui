@@ -64,6 +64,8 @@ Run these from `app/`:
 | `bun run typecheck` | checks the types, in `.ts` and `.vue` files |
 | `bun run lint` | checks the formatting. `bun run format` fixes it |
 
+A commit that changes `app/` runs `bun run lint`, `bun run typecheck` and `bun test` first, from the hook in `.githooks/`. `bun install` switches it on for the clone; `git commit --no-verify` skips it.
+
 ### Online Use
 
 The online docs and GUI versions are hosted at Netlify. They use secure HTTPS, so the Feathers server has to serve SSL as well.

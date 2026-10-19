@@ -9,7 +9,8 @@
         "preview": "bun --bun vite preview",
         "typecheck": "bun scripts/typecheck.ts --noEmit",
         "lint": "bun --bun prettier --check .",
-        "format": "bun --bun prettier --write ."
+        "format": "bun --bun prettier --write .",
+        "prepare": "git config core.hooksPath .githooks || true"
     },
     "dependencies": {
         "vue": "^3.5.43"
