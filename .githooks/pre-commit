@@ -1,0 +1,15 @@
+#!/bin/sh
+# Checks the new app before a commit that touches it: formatting, types and unit tests.
+# `bun install` in app/ switches this folder on (its `prepare` script); `git commit --no-verify` skips it.
+# It checks the files as they are in the working tree, not only what is staged.
+
+git diff --cached --quiet -- app/ && exit 0
+
+# A Git client started outside a login shell may not have Bun on its PATH
+PATH="$HOME/.bun/bin:$PATH"
+
+cd app || exit 1
+bun run lint && bun run typecheck && bun test || {
+    echo 'pre-commit: the checks above failed; commit refused' >&2
+    exit 1
+}

@@ -10,7 +10,8 @@
         "e2e": "cd e2e && bun test ./*.e2e.ts",
         "typecheck": "bun scripts/typecheck.ts --noEmit",
         "lint": "bun --bun prettier --check .",
-        "format": "bun --bun prettier --write ."
+        "format": "bun --bun prettier --write .",
+        "prepare": "git config core.hooksPath .githooks || true"
     },
     "dependencies": {
         "@dmccuskey/feathers-connect": "link:@dmccuskey/feathers-connect",
