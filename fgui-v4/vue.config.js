@@ -1,4 +1,4 @@
-const port = 9092 // Easy to change the port here
+const port = 3043 // Easy to change the port here
 
 module.exports = {
   devServer: {

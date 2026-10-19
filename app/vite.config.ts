@@ -4,8 +4,8 @@ import { defineConfig } from 'vite'
 export default defineConfig({
     plugins: [vue()],
     server: {
-        // 9092 is `fgui-v4`'s, which runs beside this app while it is the reference
-        port: Number(process.env.PORT ?? 9093),
+        // The project's ports are 3040 to 3049: 3040 and 3041 are the dev servers', 3043 is `fgui-v4`'s
+        port: Number(process.env.PORT ?? 3042),
         strictPort: true,
     },
 })

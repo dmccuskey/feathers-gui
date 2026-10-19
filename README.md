@@ -43,7 +43,7 @@ yarn install
 yarn run serve
 ```
 
-The server can be accessed at [http://localhost:9092](http://localhost:9092)
+The server can be accessed at [http://localhost:3043](http://localhost:3043)
 
 _The port number can be changed in `vue.config.js`._
 
@@ -58,7 +58,7 @@ Run these from `app/`:
 | command | does |
 | --- | --- |
 | `bun install` | installs the dependencies |
-| `bun run dev` | serves the app at [http://localhost:9093](http://localhost:9093). `PORT` changes the port |
+| `bun run dev` | serves the app at [http://localhost:3042](http://localhost:3042). `PORT` changes the port |
 | `bun run build` | builds the app into `dist/` |
 | `bun test` | runs the tests |
 | `bun run typecheck` | checks the types, in `.ts` and `.vue` files |
