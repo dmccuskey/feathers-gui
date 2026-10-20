@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test'
+import { computed } from 'vue'
 import { FakeBrowser } from '../../test-support/fake-browser.ts'
 import { fakeConnection, type FakeConnection, type FakeConnectionOptions } from '../../test-support/fake-connection.ts'
 import { Secrets } from './secrets.ts'
@@ -410,6 +411,88 @@ async function writable(answer: FakeConnectionOptions['onWrite'] = write => ({ i
 
     return { ...made, view }
 }
+
+test('a view selects a record by its ID, and holds it from what it read', async () => {
+    const made = makeSession({ services: { messages: [{ id: 1, text: 'A' }, { id: 2 }] } }, ['messages'])
+    const view = made.session.views[0]!
+    const text = computed(() => view.selected?.raw.text)
+
+    expect([view.selectedId, view.selected]).toEqual([null, undefined])
+    view.select('1')
+    expect(view.selected).toBeUndefined()
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+
+    expect(view.selectedId).toBe('1')
+    expect(view.selected).toBe(view.record('1'))
+    expect(text.value).toBe('A')
+
+    view.select('2')
+    expect(text.value).toBeUndefined()
+    expect(view.selected?.id).toBe('2')
+    view.select(null)
+    expect([view.selectedId, view.selected]).toEqual([null, undefined])
+})
+
+test('the selection follows its record by the events, and keeps its ID while the record is gone', async () => {
+    const made = makeSession({ services: { messages: [{ id: 1, text: 'A' }] } }, ['messages'])
+    const view = made.session.views[0]!
+    const text = computed(() => view.selected?.raw.text)
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+    view.select('1')
+
+    made.connection.emit('messages', 'patched', { id: 1, text: 'B' })
+    await settled()
+    expect(text.value).toBe('B')
+
+    made.connection.emit('messages', 'removed', { id: 1, text: 'B' })
+    await settled()
+    expect([view.selectedId, view.selected]).toEqual(['1', undefined])
+
+    made.connection.emit('messages', 'created', { id: 1, text: 'C' })
+    await settled()
+    expect(text.value).toBe('C')
+})
+
+test('the selection is kept while the records are stale', async () => {
+    const made = makeSession({ manual: true, services: { messages: [{ id: 1 }] } }, ['messages'])
+    const view = made.session.views[0]!
+
+    showAll(made.session)
+    void made.session.open()
+    await settled()
+    made.connection.accept()
+    await settled()
+    view.select('1')
+
+    made.connection.drop()
+    await settled()
+    expect(view.status.phase).toBe('stale')
+    expect(view.selected?.id).toBe('1')
+})
+
+test('the selection is dropped when the ID field is guessed again', async () => {
+    const services: Record<string, unknown> = { empty: [] }
+    const made = makeSession({ services }, ['empty'])
+    const view = made.session.views[0]!
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+    view.select('1')
+
+    services.empty = [{ _id: 'a' }]
+    made.connection.emit('empty', 'created', { _id: 'a' })
+    await settled()
+    await settled()
+    expect(view.idField).toBe('_id')
+    expect(view.selectedId).toBeNull()
+})
 
 test('a write is sent to the server as the raw record, and resolves with its answer as an envelope', async () => {
     const { view, connection } = await writable()
