@@ -1,6 +1,7 @@
 // A connection for a test. It connects at once, or fails with `error`, or, with `manual`, waits for the test to say
 // what the server does. Its services answer a `find` with what is given. With `password` it has a login, and logs
-// in again by itself with its token each time it connects, as a `FeathersConnection` does.
+// in again by itself with its token each time it connects, as a `FeathersConnection` does. `emit()` sends a service's
+// event.
 import {
     FeathersRecordSource,
     type AuthenticationRequest,
@@ -36,6 +37,7 @@ export interface FakeWrite {
 
 type Listener = () => void
 type ErrorListener = (error: Error) => void
+type EventListener = (record: unknown) => void
 
 /** An error of the server's, with its code, as Feathers sends it. */
 export function serverError(message: string, code: number): Error {
@@ -50,6 +52,8 @@ export class FakeConnection implements SessionConnection {
     #pending: { resolve: () => void; reject: (error: Error) => void } | undefined
     readonly #authenticated = new Set<Listener>()
     readonly #authenticationLost = new Set<ErrorListener>()
+    // The listeners of each service's events, by path and event
+    readonly #events = new Map<string, Set<EventListener>>()
     #pendingLogin: { request: AuthenticationRequest; resolve: () => void; reject: (error: Error) => void } | undefined
     #isConnected = false
     #isTokenKept = false
@@ -184,9 +188,20 @@ export class FakeConnection implements SessionConnection {
             update: (id, data) => write('update', id, data),
             patch: (id, data) => write('patch', id, data),
             remove: id => write('remove', id),
-            on: () => {},
-            off: () => {},
+            on: (event, listener) => {
+                const key = `${path} ${event}`
+
+                this.#events.set(key, (this.#events.get(key) ?? new Set()).add(listener))
+            },
+            off: (event, listener) => {
+                this.#events.get(`${path} ${event}`)?.delete(listener)
+            },
         }
+    }
+
+    /** The service at `path` sends an event, such as `created`, with its record. */
+    emit(path: string, event: string, record: unknown): void {
+        for (const listener of [...(this.#events.get(`${path} ${event}`) ?? [])]) listener(record)
     }
 
     recordSource: SessionConnection['recordSource'] = (path, options) =>
