@@ -1,11 +1,12 @@
-// One service of the session: what the service area shows of it. Nothing is read until it is first shown. For now it
-// reads a first page of records each time it is shown, and again each time the session is ready after that, until
-// it has a loader of its own (ADR 006).
+// One service of the session: what the service area shows of it. Nothing is read until it is first shown. Its first
+// read is the probe; a service small enough is then loaded whole, and kept current by the events from then on
+// (ADR 006). Any other shows the probe's first page, read again each time it is shown, until the paged loader.
 import { shallowRef } from 'vue'
 import { envelopeConversion, rawConversion } from './envelope.ts'
-import { guessIdField, probe } from './probe.ts'
+import { guessIdField, probe, type ProbeResult } from './probe.ts'
 import type { RecordEnvelope, SessionConnection, SessionPhase } from './session.ts'
 import type { ServiceSetup } from './setup.ts'
+import { WholeLoader, type RecordLoader } from './whole-loader.ts'
 
 export type ViewPhase =
     | 'waiting' // no records: not shown yet, or the session is not ready
@@ -23,8 +24,11 @@ export interface ViewStatus {
 /** What the view uses of the connection. */
 export type ViewConnection = Pick<SessionConnection, 'service' | 'recordSource'>
 
-/** How many records `read()` keeps at most. */
+/** How many records of the first page are kept, when the service is not loaded whole. */
 export const FIRST_PAGE = 25
+
+/** How many records a service may have, at most, to be loaded whole without asking. */
+export const WHOLE_LIMIT = 1000
 
 export class ServiceView {
     readonly serviceId: string
@@ -33,10 +37,15 @@ export class ServiceView {
     readonly #connection: ViewConnection
     // The setup's ID field, if the user named one
     readonly #setIdField: string | undefined
+    readonly #load: ServiceSetup['load']
     readonly #idField = shallowRef<string | undefined>(undefined)
     readonly #total = shallowRef<number | undefined>(undefined)
     readonly #status = shallowRef<ViewStatus>({ phase: 'waiting' })
+    // The first page, when there is no loader
     readonly #records = shallowRef<readonly RecordEnvelope[] | null>(null)
+    readonly #loader = shallowRef<RecordLoader | undefined>(undefined)
+    // A loader whose first load is under way
+    #loading: RecordLoader | undefined
     #isSessionReady = false
     // It has been shown: it reads each time the session is ready
     #isWanted = false
@@ -49,6 +58,7 @@ export class ServiceView {
         this.path = service.path
         this.#connection = connection
         this.#setIdField = service.idField
+        this.#load = service.load
         this.#idField.value = service.idField
     }
 
@@ -64,7 +74,7 @@ export class ServiceView {
 
     /** Reactive. How many records the service has, as of the last read. `undefined` when it does not say. */
     get total(): number | undefined {
-        return this.#total.value
+        return this.#loader.value ? this.#loader.value.total : this.#total.value
     }
 
     /** Reactive. */
@@ -72,54 +82,91 @@ export class ServiceView {
         return this.#status.value
     }
 
-    /** Reactive. The records last read, or `null` before there are any. */
+    /** Reactive. Every record, when loaded whole; else the first page. `null` before there are any. */
     get records(): readonly RecordEnvelope[] | null {
-        return this.#records.value
+        return this.#loader.value?.rows ?? this.#records.value
+    }
+
+    /** Reactive. Whether the view holds every record, kept current by the events. */
+    get isWhole(): boolean {
+        return this.#loader.value !== undefined
     }
 
     /**
-     * Reads the first records again, while the session is ready and no read is under way, and each time the session
-     * is ready from now on. What the view holds is kept until the answer comes.
+     * Reads the records, while the session is ready and no read is under way, and each time the session is ready
+     * from now on. A view loaded whole has nothing to read again: the events keep it current. Otherwise the first
+     * page is read again, and what the view holds is kept until the answer comes.
      */
     async read(): Promise<void> {
         if (!this.#destroyed) this.#isWanted = true
         if (!this.#isSessionReady || this.#destroyed || this.#status.value.phase === 'loading') return
+        if (this.#loader.value) return
 
         const count = ++this.#readCount
 
         this.#status.value = { phase: 'loading' }
         try {
-            const page = await firstPage(this.#connection, this.path, this.#setIdField)
+            const { probed, idField } = await probeService(this.#connection, this.path, this.#setIdField)
 
             if (count !== this.#readCount) return
-            this.#idField.value = page.idField
-            this.#total.value = page.total
-            this.#records.value = page.records
+            this.#idField.value = idField
+            this.#total.value = probed.total
+
+            if (loadsWhole(this.#load, probed)) {
+                const loader = new WholeLoader(
+                    this.#connection.recordSource(this.path, { convert: envelopeConversion(idField), idField }),
+                )
+
+                this.#loading = loader
+                await loader.load()
+                // Stopped by follow(), which made the read stale
+                if (count !== this.#readCount) return
+                this.#loading = undefined
+                this.#loader.value = loader
+                this.#records.value = null
+            } else {
+                const convert = envelopeConversion(idField)
+
+                this.#records.value = probed.records.slice(0, FIRST_PAGE).map(raw => convert.read(raw))
+            }
             this.#status.value = { phase: 'ready' }
         } catch (error) {
             if (count !== this.#readCount) return
+            this.#loading = undefined
             this.#status.value = { phase: 'failed', error: errorOf(error) }
         }
     }
 
     /**
-     * Told by the session where it is. Ready: the view reads, once it has been shown. Waiting for a login, or closed: the records are
-     * dropped, as they may be another user's. Otherwise they are kept, as stale.
+     * Told by the session where it is. Ready: a view loaded whole syncs, as events may have been missed; any other
+     * reads, once it has been shown. Waiting for a login, or closed: the records are dropped, as they may be another
+     * user's. Otherwise they are kept, as stale.
      */
     follow(phase: SessionPhase): void {
         if (this.#destroyed) return
 
         this.#isSessionReady = phase === 'ready'
         if (this.#isSessionReady) {
-            if (this.#isWanted) void this.read()
+            if (this.#loader.value) {
+                this.#loader.value.sync()
+                this.#status.value = { phase: 'ready' }
+            } else if (this.#isWanted) {
+                void this.read()
+            }
 
             return
         }
 
-        // A read under way is ignored when it ends
+        // A read under way is ignored when it ends, and a first load is stopped: it may never return
         this.#readCount++
-        if (phase === 'login-needed' || phase === 'closed') this.#records.value = null
-        this.#status.value = { phase: this.#records.value ? 'stale' : 'waiting' }
+        void this.#loading?.stop()
+        this.#loading = undefined
+        if (phase === 'login-needed' || phase === 'closed') {
+            this.#records.value = null
+            void this.#loader.value?.stop()
+            this.#loader.value = undefined
+        }
+        this.#status.value = { phase: this.records ? 'stale' : 'waiting' }
     }
 
     destroy(): void {
@@ -128,17 +175,12 @@ export class ServiceView {
     }
 }
 
-interface FirstPage {
-    records: RecordEnvelope[]
-    idField: string
-    total: number | undefined
-}
-
-/**
- * The first records of a service, as the server orders them, by the probe. The ID field is `idField`, or else
- * guessed from what the probe read.
- */
-async function firstPage(connection: ViewConnection, path: string, idField?: string): Promise<FirstPage> {
+/** The probe of a service, and its ID field: `idField`, or else guessed from what the probe read. */
+async function probeService(
+    connection: ViewConnection,
+    path: string,
+    idField?: string,
+): Promise<{ probed: ProbeResult; idField: string }> {
     const source = connection.recordSource(path, { convert: rawConversion })
     const probed = await probe({
         findPage: async limit => {
@@ -152,13 +194,17 @@ async function firstPage(connection: ViewConnection, path: string, idField?: str
 
     if (field === undefined) throw new NoIdFieldError(path)
 
-    const convert = envelopeConversion(field)
+    return { probed, idField: field }
+}
 
-    return {
-        records: probed.records.slice(0, FIRST_PAGE).map(raw => convert.read(raw)),
-        idField: field,
-        total: probed.total,
-    }
+/**
+ * Whether a service is loaded whole: not set to be paged, and with a count the probe knows, at most `WHOLE_LIMIT`.
+ * Over it, or with the count unknown, the user is to be asked first, which is not built yet.
+ */
+function loadsWhole(load: ServiceSetup['load'], probed: ProbeResult): boolean {
+    const count = probed.isWhole ? probed.records.length : probed.total
+
+    return load !== 'paged' && count !== undefined && count <= WHOLE_LIMIT
 }
 
 // The records of what a `find()` answered: a page, or an array

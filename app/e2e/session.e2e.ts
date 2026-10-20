@@ -6,6 +6,7 @@ import {
     contextWith,
     launch,
     openApp,
+    SERVER_URL,
     setupOf,
     startApp,
     startServer,
@@ -193,6 +194,23 @@ test('a lost connection keeps the records dimmed, and Try Now brings the session
     expect(await page.getByRole('dialog').count()).toBe(0)
 }, 40_000)
 
+test('a service loaded whole shows every record, and a change made by another client as it comes', async () => {
+    const page = await openApp(await newContext(storedSetup(['messages', 'notes']), 'messages'))
+
+    await loggedIn(page)
+    await records(page).nth(24).waitFor()
+    expect(await records(page).count()).toBe(25)
+
+    const answer = await fetch(`${SERVER_URL}/messages/1`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'Changed elsewhere' }),
+    })
+
+    expect(answer.ok).toBe(true)
+    await records(page).filter({ hasText: 'Changed elsewhere' }).waitFor()
+}, 30_000)
+
 test("a token that runs out is replaced by the session's own login, and the records are still read", async () => {
     await server.stop()
     server = await startServer({ TOKEN_LIFE: '3s' })
@@ -203,7 +221,7 @@ test("a token that runs out is replaced by the session's own login, and the reco
     await records(page).first().waitFor()
     await Bun.sleep(5_000)
 
-    // `notes` needs the login: reading it again shows the session logged in again
+    // `notes` needs the login: its records, synced once the session is ready again, show it logged in again
     await page.locator('.side-bar-path', { hasText: 'messages' }).click()
     await page.locator('.service-area-path', { hasText: 'messages' }).waitFor()
     await page.locator('.side-bar-path', { hasText: 'notes' }).click()

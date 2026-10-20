@@ -45,8 +45,8 @@ function addServer(app: GuiApp, name: string): ServerSetup {
     return app.setup.addServer({ name, url: `http://${name}.test`, readOnly: false })
 }
 
-function addService(app: GuiApp, server: ServerSetup, path: string): ServiceSetup {
-    return app.setup.addService({ serverId: server.id, path, load: 'auto', fields: [], pins: [] })
+function addService(app: GuiApp, server: ServerSetup, path: string, load: ServiceSetup['load'] = 'auto'): ServiceSetup {
+    return app.setup.addService({ serverId: server.id, path, load, fields: [], pins: [] })
 }
 
 test('the app renders its name', () => {
@@ -131,11 +131,11 @@ test('the service current at the start is read', async () => {
     expect(wrapper.findAll('.service-area-records li').map(item => item.text())).toEqual(['{"_id":"a"}'])
 })
 
-test('a service chosen again is read again', async () => {
+test('a service chosen again is read again, when it is not loaded whole', async () => {
     const services: Record<string, unknown> = { things: [{ _id: 'a' }], messages: [{ id: 1 }] }
     const { app, wrapper } = mountApp({ services })
     const server = addServer(app, 'local')
-    const things = addService(app, server, 'things')
+    const things = addService(app, server, 'things', 'paged')
     const messages = addService(app, server, 'messages')
     const listed = () => wrapper.findAll('.service-area-records li').map(item => item.text())
 

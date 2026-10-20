@@ -16,6 +16,7 @@
     "dependencies": {
         "@dmccuskey/feathers-connect": "link:@dmccuskey/feathers-connect",
         "@dmccuskey/micro-fsm": "link:@dmccuskey/micro-fsm",
+        "live-system": "link:live-system",
         "vue": "^3.5.43"
     },
     "devDependencies": {
