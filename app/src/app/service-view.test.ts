@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { FakeBrowser } from '../../test-support/fake-browser.ts'
 import { fakeConnection, type FakeConnection, type FakeConnectionOptions } from '../../test-support/fake-connection.ts'
 import { Secrets } from './secrets.ts'
+import { WriteError, type ServiceView } from './service-view.ts'
 import { Session } from './session.ts'
 import { Setup, type ServerSetup, type ServiceSetup } from './setup.ts'
 
@@ -336,4 +337,106 @@ test('destroying the session ends its views', async () => {
 
     await view.read()
     expect(view.status).toEqual({ phase: 'waiting' })
+})
+
+/** A ready session whose `messages` view has read, and whose server answers each write with `answer`. */
+async function writable(answer: FakeConnectionOptions['onWrite'] = write => ({ id: write.id ?? 9, ...write.data })) {
+    const made = makeSession({ services: { messages: [{ id: 1, text: 'one' }] }, onWrite: answer }, ['messages'])
+    const view = made.session.views[0]!
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+
+    return { ...made, view }
+}
+
+test('a write is sent to the server as the raw record, and resolves with its answer as an envelope', async () => {
+    const { view, connection } = await writable()
+
+    expect(await view.create({ text: 'new' })).toEqual({ id: '9', raw: { id: 9, text: 'new' } })
+    expect(await view.patch('1', { text: 'changed' })).toEqual({ id: '1', raw: { id: '1', text: 'changed' } })
+    expect(await view.update('1', { id: 1, text: 'whole' })).toEqual({ id: '1', raw: { id: 1, text: 'whole' } })
+    expect(await view.remove('1')).toEqual({ id: '1', raw: { id: '1' } })
+    expect(connection.writes).toEqual([
+        { path: 'messages', method: 'create', data: { text: 'new' } },
+        { path: 'messages', method: 'patch', id: '1', data: { text: 'changed' } },
+        { path: 'messages', method: 'update', id: '1', data: { id: 1, text: 'whole' } },
+        { path: 'messages', method: 'remove', id: '1' },
+    ])
+})
+
+test('a write changes nothing the view holds: only the event after it does', async () => {
+    const { view } = await writable()
+
+    await view.patch('1', { text: 'changed' })
+    await view.create({ text: 'new' })
+
+    expect(view.records).toEqual([{ id: '1', raw: { id: 1, text: 'one' } }])
+})
+
+test('a server set read-only refuses every write before any call, as soon as it is set', async () => {
+    const { view, connection, setup, server } = await writable()
+
+    setup.updateServer(server.id, { readOnly: true })
+
+    for (const write of [
+        () => view.create({}),
+        () => view.patch('1', {}),
+        () => view.update('1', {}),
+        () => view.remove('1'),
+    ]) {
+        await expect(write()).rejects.toMatchObject({ name: 'WriteError', reason: 'read-only' })
+    }
+    expect(connection.writes).toEqual([])
+})
+
+test('a write is refused while the session is not ready, or before the ID field is known', async () => {
+    const made = makeSession({ services: { messages: [{ id: 1 }], things: [{ name: 'no id' }] } }, [
+        'messages',
+        'things',
+    ])
+    const [messages, things] = made.session.views as [ServiceView, ServiceView]
+
+    await expect(messages.create({})).rejects.toMatchObject({ reason: 'not-ready' })
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+
+    expect(things.status.phase).toBe('failed')
+    await expect(things.create({})).rejects.toMatchObject({ reason: 'not-ready' })
+    expect(made.connection.writes).toEqual([])
+})
+
+test("the server's refusal is handed on with its name, code, data and errors", async () => {
+    const ajv = [{ instancePath: '/text', keyword: 'type', message: 'must be string', params: {} }]
+    const refusal = (data: unknown, errors?: unknown) =>
+        Object.assign(new Error('validation failed'), {
+            name: 'BadRequest',
+            code: 400,
+            className: 'bad-request',
+            data,
+            errors,
+        })
+    let answer: Error = refusal(ajv)
+    const { view } = await writable(() => {
+        throw answer
+    })
+
+    const first = await view.patch('1', { text: 2 }).catch((error: unknown) => error)
+
+    expect(first).toBeInstanceOf(WriteError)
+    expect(first).toMatchObject({
+        name: 'BadRequest',
+        reason: 'server',
+        message: 'validation failed',
+        code: 400,
+        className: 'bad-request',
+        data: ajv,
+        errors: ajv,
+    })
+
+    answer = refusal({ field: 'x' }, { text: 'is wrong' })
+    await expect(view.create({})).rejects.toMatchObject({ data: { field: 'x' }, errors: { text: 'is wrong' } })
 })
