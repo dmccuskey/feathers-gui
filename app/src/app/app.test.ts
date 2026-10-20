@@ -11,6 +11,7 @@ import {
     type AppOptions,
     type LoginDialogInput,
     type PageVisibility,
+    type ServiceDialogInput,
 } from './app.ts'
 import type { OpenDialog } from './dialogs.ts'
 import { Session, type SessionParts } from './session.ts'
@@ -503,13 +504,13 @@ test('a service is added to the current server, the first made current, and edit
     app.activateServer(server.id)
 
     let flow = app.addService()
-    await answer(app, 'service', { path: 'messages', load: 'auto' })
+    await answer(app, 'service', { path: 'messages', load: 'auto', idField: undefined })
     await flow
 
     flow = app.addService()
     await Promise.resolve()
     expect(app.dialogs.open[0]?.input).toEqual({ taken: ['messages'] })
-    await answer(app, 'service', { path: 'things', load: 'whole' })
+    await answer(app, 'service', { path: 'things', load: 'whole', idField: undefined })
     await flow
 
     const [messages, things] = app.setup.servicesOf(server.id)
@@ -520,10 +521,10 @@ test('a service is added to the current server, the first made current, and edit
     flow = app.editService(things?.id as string)
     await Promise.resolve()
     expect(app.dialogs.open[0]?.input).toMatchObject({ taken: ['messages'] })
-    await answer(app, 'service', { path: 'stuff', load: 'paged' })
+    await answer(app, 'service', { path: 'stuff', load: 'paged', idField: 'uuid' })
     await flow
 
-    expect(app.setup.service(things?.id as string)).toMatchObject({ path: 'stuff', load: 'paged' })
+    expect(app.setup.service(things?.id as string)).toMatchObject({ path: 'stuff', load: 'paged', idField: 'uuid' })
 
     flow = app.removeService(messages?.id as string)
     await answer(app, 'ask', 'remove')
@@ -531,6 +532,45 @@ test('a service is added to the current server, the first made current, and edit
 
     expect(app.setup.servicesOf(server.id).map(service => service.path)).toEqual(['stuff'])
     expect(app.setup.currentServiceId(server.id)).toBeNull()
+})
+
+test('editing a service hands the dialog the ID field the session guessed, if any', async () => {
+    const services = { guessed: [{ _id: 'a' }], none: [{ uuid: 'x' }], named: [{ _id: 'a' }], unread: [{ id: 1 }] }
+    const app = new App({ storage: new FakeBrowser().open(), makeSession: fakeSessions({ services }), secrets: ALONE })
+    const server = app.setup.addServer(SERVER)
+    const ids = Object.keys(services).map(
+        path =>
+            app.setup.addService({
+                serverId: server.id,
+                path,
+                ...(path === 'named' ? { idField: '_id' } : {}),
+                load: 'auto',
+                fields: [],
+                pins: [],
+            }).id,
+    )
+
+    app.activateServer(server.id)
+    for (const id of ids.slice(0, 3)) void app.session?.view(id)?.read()
+    for (let i = 0; i < 20; i++) await Promise.resolve()
+
+    const guesses: unknown[] = []
+
+    for (const id of ids) {
+        const flow = app.editService(id)
+
+        await Promise.resolve()
+        guesses.push(app.dialogs.open[0]?.input)
+        await answer(app, 'service', undefined)
+        await flow
+    }
+
+    expect(guesses.map(input => (input as ServiceDialogInput).guessedIdField)).toEqual([
+        '_id',
+        null,
+        undefined,
+        undefined,
+    ])
 })
 
 test('an import asks how when something is set up, and says so when the file is no setup', async () => {

@@ -5,6 +5,7 @@ import { effectScope, inject, shallowRef, watch, type InjectionKey } from 'vue'
 import { Dialogs } from './dialogs.ts'
 import { Secrets, type SecretsOptions } from './secrets.ts'
 import { Session, type LoginCredentials, type SessionParts } from './session.ts'
+import type { ServiceView } from './service-view.ts'
 import {
     Setup,
     SetupBlockedError,
@@ -51,9 +52,15 @@ export interface ServiceDialogInput {
     service?: ServiceSetup
     /** The paths of the server's other services: none is set up twice. */
     taken: readonly string[]
+    /**
+     * The ID field the session guessed for the service, while the setup names none. `null`: neither `id` nor `_id`
+     * will do. Unset: not known, as the service has not been read or its server is not the session's.
+     */
+    guessedIdField?: string | null
 }
 
-export type ServiceDialogAnswer = Pick<ServiceSetup, 'path' | 'load'>
+/** `idField` is `undefined` when left blank: the ID field is guessed. */
+export type ServiceDialogAnswer = Pick<ServiceSetup, 'path' | 'load'> & { idField: string | undefined }
 
 export interface LoginDialogInput {
     /** The server to log in to, with its login. */
@@ -300,7 +307,7 @@ export class App {
             .servicesOf(service.serverId)
             .filter(other => other.id !== serviceId)
             .map(other => other.path)
-        const answer = await this.dialogs.show('service', { service, taken })
+        const answer = await this.dialogs.show('service', { service, taken, ...guessOf(this.session?.view(serviceId)) })
 
         if (answer) await this.#write(() => this.setup.updateService(serviceId, answer))
     }
@@ -450,4 +457,12 @@ export function useApp(): App {
     if (!app) throw new Error('The app is not provided: useApp() needs provide(APP_KEY, app)')
 
     return app
+}
+
+/** The ID field a view guessed, for the service dialog: none while the setup names one or nothing has been read. */
+function guessOf(view: ServiceView | undefined): Pick<ServiceDialogInput, 'guessedIdField'> {
+    if (!view?.idFieldGuessed) return {}
+    if (view.status.error?.reason === 'no-id-field') return { guessedIdField: null }
+
+    return view.idField === undefined ? {} : { guessedIdField: view.idField }
 }

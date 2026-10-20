@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import { mount } from '@vue/test-utils'
 import type { ServerDialogInput, ServiceDialogInput } from '../app/app.ts'
+import type { ServiceSetup } from '../app/setup.ts'
 import ServerDialog from './ServerDialog.vue'
 import ServiceDialog from './ServiceDialog.vue'
 
@@ -145,5 +146,44 @@ test('a service answers its path without the slashes around it, and how it is lo
     await wrapper.find('input[value="paged"]').setValue(true)
     await submit(wrapper)
 
-    expect(wrapper.emitted('answer')).toEqual([[{ path: 'api/users', load: 'paged' }]])
+    expect(wrapper.emitted('answer')).toEqual([[{ path: 'api/users', load: 'paged', idField: undefined }]])
+})
+
+test('a service answers the ID field typed, and none when it is left blank', async () => {
+    const service: ServiceSetup = {
+        id: 's1',
+        serverId: 'v1',
+        path: 'things',
+        idField: 'uuid',
+        load: 'auto',
+        fields: [],
+        pins: [],
+    }
+    const wrapper = mountService({ service, taken: [] })
+    const idField = wrapper.find('.service-dialog-id-field')
+
+    expect((idField.element as HTMLInputElement).value).toBe('uuid')
+
+    await idField.setValue(' key ')
+    await submit(wrapper)
+    await idField.setValue('  ')
+    await submit(wrapper)
+
+    expect(wrapper.emitted('answer')).toEqual([
+        [{ path: 'things', load: 'auto', idField: 'key' }],
+        [{ path: 'things', load: 'auto', idField: undefined }],
+    ])
+})
+
+test("the ID field's placeholder says what the session guessed, or that nothing will do", () => {
+    const placeholder = (guessedIdField?: string | null) =>
+        mountService({ taken: [], ...(guessedIdField === undefined ? {} : { guessedIdField }) })
+            .find('.service-dialog-id-field')
+            .attributes('placeholder')
+
+    expect([placeholder(), placeholder('_id'), placeholder(null)]).toEqual([
+        'Guessed',
+        "Guessed as '_id'",
+        'Neither id nor _id: name it',
+    ])
 })
