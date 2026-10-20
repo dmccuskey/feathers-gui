@@ -22,6 +22,7 @@ export type SessionConnection = Pick<
     | 'connect'
     | 'disconnect'
     | 'service'
+    | 'recordSource'
     | 'onConnected'
     | 'onDisconnected'
     | 'onConnectError'

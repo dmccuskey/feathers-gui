@@ -71,31 +71,101 @@ test('only a view that has been shown reads its first page when the session is r
 })
 
 test('the first page has each record as the server has it, under its ID as a string', async () => {
-    const made = makeSession({ services: { things: [{ _id: 'a', id: 'its own' }] } }, ['things'])
+    const made = makeSession({ services: { things: [{ _id: 'a', name: 'A' }] } }, ['things'])
 
     showAll(made.session)
     await made.session.open()
     await settled()
 
-    expect(made.session.views[0]?.records).toEqual([{ id: 'a', raw: { _id: 'a', id: 'its own' } }])
+    expect(made.session.views[0]?.records).toEqual([{ id: 'a', raw: { _id: 'a', name: 'A' } }])
+    expect(made.session.views[0]?.idField).toBe('_id')
+    expect(made.session.views[0]?.idFieldGuessed).toBe(true)
 })
 
-test('the first page is at most 25 records, of a service with pages or without', async () => {
-    const records = Array.from({ length: 40 }, (_, id) => ({ id }))
+test('the ID field guessed is id before _id, and the one the setup names is taken as it is', async () => {
     const made = makeSession(
-        { services: { whole: records, paged: { total: 40, limit: 30, skip: 0, data: records.slice(0, 30) } } },
-        ['whole', 'paged'],
+        { services: { guessed: [{ _id: 'a', id: 'its own' }], named: [{ _id: 'a', id: 'its own' }] } },
+        ['guessed', 'named'],
     )
+    const named = made.setup.servicesOf(made.server.id).find(each => each.path === 'named')!
+
+    made.setup.updateService(named.id, { idField: '_id' })
+    await settled()
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+
+    expect(made.session.views.map(view => view.idFieldGuessed)).toEqual([true, false])
+    expect(made.session.views.map(view => view.records?.[0]?.id)).toEqual(['its own', 'a'])
+})
+
+test('a service with neither id nor _id on every record fails, for the user to name the ID field', async () => {
+    const { session } = makeSession({ services: { things: [{ uuid: 'x1' }, { uuid: 'x2' }] } }, ['things'])
+
+    showAll(session)
+    await session.open()
+    await settled()
+
+    expect(session.views[0]?.status.phase).toBe('failed')
+    expect(session.views[0]?.status.error?.reason).toBe('no-id-field')
+})
+
+test('the total, where the server gives it', async () => {
+    const records = Array.from({ length: 10 }, (_, id) => ({ id }))
+    const made = makeSession({ services: { paged: { total: 3000, limit: 10, skip: 0, data: records } } }, ['paged'])
 
     showAll(made.session)
     await made.session.open()
     await settled()
 
-    expect(idsOf(made, 'whole')).toEqual(Array.from({ length: 25 }, (_, id) => String(id)))
+    expect(made.session.views[0]?.total).toBe(3000)
+})
+
+test('a service with a count of at most 1000 is loaded whole, and is not read again when shown again', async () => {
+    const services: Record<string, unknown> = { messages: Array.from({ length: 40 }, (_, id) => ({ id })) }
+    const made = makeSession({ services }, ['messages'])
+    const view = made.session.views[0]!
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+
+    expect(view.isWhole).toBe(true)
+    expect(view.total).toBe(40)
+    expect(idsOf(made, 'messages')).toHaveLength(40)
+
+    services.messages = [{ id: 'other' }]
+    await view.read()
+    expect(idsOf(made, 'messages')).toHaveLength(40)
+})
+
+test('a service set to be paged, or over 1000, or with no count, shows the first 25 records', async () => {
+    const records = Array.from({ length: 1001 }, (_, id) => ({ id }))
+    const made = makeSession(
+        {
+            services: {
+                small: records.slice(0, 40),
+                large: records,
+                paged: { total: 1001, limit: 30, skip: 0, data: records.slice(0, 30) },
+            },
+        },
+        ['small', 'large', 'paged'],
+    )
+    const small = made.setup.servicesOf(made.server.id)[0]!
+
+    made.setup.updateService(small.id, { load: 'paged' })
+    await settled()
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+
+    expect(made.session.views.map(view => view.isWhole)).toEqual([false, false, false])
+    expect(idsOf(made, 'small')).toEqual(Array.from({ length: 25 }, (_, id) => String(id)))
+    expect(idsOf(made, 'large')).toHaveLength(25)
     expect(idsOf(made, 'paged')).toHaveLength(25)
 })
 
-test('a service the server does not have, or that does not answer with records, fails with the reason', async () => {
+test('a service the server does not have, or that does not answer with records, fails', async () => {
     const { session } = makeSession({ services: { odd: { status: 'ok' } } }, ['nothing', 'odd'])
 
     showAll(session)
@@ -103,10 +173,8 @@ test('a service the server does not have, or that does not answer with records, 
     await settled()
 
     expect(session.views[0]?.status).toEqual({ phase: 'failed', error: { message: 'Service not found: nothing' } })
-    expect(session.views[1]?.status).toEqual({
-        phase: 'failed',
-        error: { message: 'The service "odd" did not answer with records' },
-    })
+    // findPage() takes an answer that is not a page or an array for one record
+    expect(session.views[1]?.status.error?.reason).toBe('no-id-field')
 })
 
 test('a service added gets a view, which reads once shown, and one removed loses it', async () => {
@@ -167,7 +235,7 @@ test('a service whose path, ID field or way of loading changes gets a new view; 
     expect(made.session.views[0]).not.toBe(third)
 })
 
-test('a lost connection keeps the records, as stale, and the view reads again once ready', async () => {
+test('a lost connection keeps the records, as stale, and a view loaded whole syncs once ready', async () => {
     const services: Record<string, unknown> = { messages: [{ id: 1 }] }
     const made = makeSession({ manual: true, services }, ['messages'])
 
@@ -192,6 +260,10 @@ test('a lost connection keeps the records, as stale, and the view reads again on
 test('read() before the session is ready reads once it is, and again later keeps the records until the answer', async () => {
     const services: Record<string, unknown> = { messages: [{ id: 1 }] }
     const made = makeSession({ services }, ['messages'])
+
+    made.setup.updateService(made.setup.servicesOf(made.server.id)[0]!.id, { load: 'paged' })
+    await settled()
+
     const view = made.session.views[0]!
 
     await view.read()

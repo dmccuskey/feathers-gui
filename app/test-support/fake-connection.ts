@@ -1,7 +1,11 @@
 // A connection for a test. It connects at once, or fails with `error`, or, with `manual`, waits for the test to say
 // what the server does. Its services answer a `find` with what is given. With `password` it has a login, and logs
 // in again by itself with its token each time it connects, as a `FeathersConnection` does.
-import type { AuthenticationRequest, AuthenticationResult } from '@dmccuskey/feathers-connect'
+import {
+    FeathersRecordSource,
+    type AuthenticationRequest,
+    type AuthenticationResult,
+} from '@dmccuskey/feathers-connect'
 import { Session, type SessionConnection, type SessionParts } from '../src/app/session.ts'
 import type { ServerSetup } from '../src/app/setup.ts'
 
@@ -164,6 +168,9 @@ export class FakeConnection implements SessionConnection {
             off: () => {},
         }
     }
+
+    recordSource: SessionConnection['recordSource'] = (path, options) =>
+        new FeathersRecordSource(this.service(path), { path, ...options })
 
     onConnected(listener: Listener): () => void {
         return on(this.#connected, listener)
