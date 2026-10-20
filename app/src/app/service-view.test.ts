@@ -71,13 +71,56 @@ test('only a view that has been shown reads its first page when the session is r
 })
 
 test('the first page has each record as the server has it, under its ID as a string', async () => {
-    const made = makeSession({ services: { things: [{ _id: 'a', id: 'its own' }] } }, ['things'])
+    const made = makeSession({ services: { things: [{ _id: 'a', name: 'A' }] } }, ['things'])
 
     showAll(made.session)
     await made.session.open()
     await settled()
 
-    expect(made.session.views[0]?.records).toEqual([{ id: 'a', raw: { _id: 'a', id: 'its own' } }])
+    expect(made.session.views[0]?.records).toEqual([{ id: 'a', raw: { _id: 'a', name: 'A' } }])
+    expect(made.session.views[0]?.idField).toBe('_id')
+    expect(made.session.views[0]?.idFieldGuessed).toBe(true)
+})
+
+test('the ID field guessed is id before _id, and the one the setup names is taken as it is', async () => {
+    const made = makeSession(
+        { services: { guessed: [{ _id: 'a', id: 'its own' }], named: [{ _id: 'a', id: 'its own' }] } },
+        ['guessed', 'named'],
+    )
+    const named = made.setup.servicesOf(made.server.id).find(each => each.path === 'named')!
+
+    made.setup.updateService(named.id, { idField: '_id' })
+    await settled()
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+
+    expect(made.session.views.map(view => view.idFieldGuessed)).toEqual([true, false])
+    expect(made.session.views.map(view => view.records?.[0]?.id)).toEqual(['its own', 'a'])
+})
+
+test('a service with neither id nor _id on every record fails, for the user to name the ID field', async () => {
+    const { session } = makeSession({ services: { things: [{ uuid: 'x1' }, { uuid: 'x2' }] } }, ['things'])
+
+    showAll(session)
+    await session.open()
+    await settled()
+
+    expect(session.views[0]?.status.phase).toBe('failed')
+    expect(session.views[0]?.status.error?.reason).toBe('no-id-field')
+})
+
+test('the total, where the server gives it', async () => {
+    const records = Array.from({ length: 30 }, (_, id) => ({ id }))
+    const made = makeSession({ services: { paged: { total: 30, limit: 10, skip: 0, data: records.slice(0, 10) } } }, [
+        'paged',
+    ])
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+
+    expect(made.session.views[0]?.total).toBe(30)
 })
 
 test('the first page is at most 25 records, of a service with pages or without', async () => {
@@ -95,7 +138,7 @@ test('the first page is at most 25 records, of a service with pages or without',
     expect(idsOf(made, 'paged')).toHaveLength(25)
 })
 
-test('a service the server does not have, or that does not answer with records, fails with the reason', async () => {
+test('a service the server does not have, or that does not answer with records, fails', async () => {
     const { session } = makeSession({ services: { odd: { status: 'ok' } } }, ['nothing', 'odd'])
 
     showAll(session)
@@ -103,10 +146,8 @@ test('a service the server does not have, or that does not answer with records, 
     await settled()
 
     expect(session.views[0]?.status).toEqual({ phase: 'failed', error: { message: 'Service not found: nothing' } })
-    expect(session.views[1]?.status).toEqual({
-        phase: 'failed',
-        error: { message: 'The service "odd" did not answer with records' },
-    })
+    // findPage() takes an answer that is not a page or an array for one record
+    expect(session.views[1]?.status.error?.reason).toBe('no-id-field')
 })
 
 test('a service added gets a view, which reads once shown, and one removed loses it', async () => {
