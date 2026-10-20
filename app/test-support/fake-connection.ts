@@ -22,6 +22,16 @@ export interface FakeConnectionOptions {
     manualLogin?: boolean
     /** Whether logging in again with the token, as the connection is made, is never answered. */
     silentRelogin?: boolean
+    /** What a service answers a write with: the record, or it throws. Without it, a write is refused. */
+    onWrite?: (write: FakeWrite) => unknown
+}
+
+/** A write a service was sent. */
+export interface FakeWrite {
+    path: string
+    method: 'create' | 'update' | 'patch' | 'remove'
+    id?: string
+    data?: Record<string, unknown>
 }
 
 type Listener = () => void
@@ -49,6 +59,8 @@ export class FakeConnection implements SessionConnection {
     /** What each `authenticate()` sent. */
     logins: AuthenticationRequest[] = []
     logouts = 0
+    /** The writes the services were sent. */
+    writes: FakeWrite[] = []
     user: Record<string, unknown> | undefined
 
     constructor(options: FakeConnectionOptions = {}) {
@@ -150,6 +162,14 @@ export class FakeConnection implements SessionConnection {
         const refused = async (): Promise<never> => {
             throw new Error('The fake service takes no writes')
         }
+        const write = async (method: FakeWrite['method'], id?: string, data?: Record<string, unknown>) => {
+            const sent = { path, method, ...(id === undefined ? {} : { id }), ...(data ? { data } : {}) }
+
+            this.writes.push(sent)
+            if (!this.#options.onWrite) return refused()
+
+            return this.#options.onWrite(sent)
+        }
 
         return {
             find: async () => {
@@ -160,10 +180,10 @@ export class FakeConnection implements SessionConnection {
                 return services[path]
             },
             get: refused,
-            create: refused,
-            update: refused,
-            patch: refused,
-            remove: refused,
+            create: data => write('create', undefined, data),
+            update: (id, data) => write('update', id, data),
+            patch: (id, data) => write('patch', id, data),
+            remove: id => write('remove', id),
             on: () => {},
             off: () => {},
         }

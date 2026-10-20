@@ -329,7 +329,9 @@ export class Session {
 
             if (view && this.#viewKeys.get(service.id) === keys.get(service.id)) return view
 
-            const made = new ServiceView(service, this.#connection)
+            const made = new ServiceView(service, this.#connection, {
+                isReadOnly: () => this.#setup.server(this.serverId)?.readOnly ?? false,
+            })
 
             made.follow(this.#machine.state)
 

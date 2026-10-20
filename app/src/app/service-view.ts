@@ -1,6 +1,7 @@
 // One service of the session: what the service area shows of it. Nothing is read until it is first shown. Its first
 // read is the probe; a service small enough is then loaded whole, and kept current by the events from then on
 // (ADR 006). Any other shows the probe's first page, read again each time it is shown, until the paged loader.
+import type { RecordSource } from 'live-system/core'
 import { shallowRef } from 'vue'
 import { envelopeConversion, rawConversion } from './envelope.ts'
 import { guessIdField, probe, type ProbeResult } from './probe.ts'
@@ -24,6 +25,38 @@ export interface ViewStatus {
 /** What the view uses of the connection. */
 export type ViewConnection = Pick<SessionConnection, 'service' | 'recordSource'>
 
+export interface ViewOptions {
+    /** Whether the server is set read-only, asked at each write. Default: never. */
+    isReadOnly?: () => boolean
+}
+
+/**
+ * Why a write failed. `read-only` and `not-ready` are refused by the view, before any call: the server is set
+ * read-only, or the session is not ready, or the ID field is not known. `server`: the server refused it, and its
+ * error is handed on, with its `name`, `code`, `className`, `data` and `errors`.
+ */
+export class WriteError extends Error {
+    readonly reason: 'read-only' | 'not-ready' | 'server'
+    readonly code: number | undefined
+    readonly className: string | undefined
+    readonly data: unknown
+    /** What the server says is wrong, field by field: its `errors`, or else its `data` when that is a list. */
+    readonly errors: unknown
+
+    constructor(message: string, reason: WriteError['reason'], cause?: unknown) {
+        super(message, cause === undefined ? undefined : { cause })
+
+        const server = (cause ?? {}) as Partial<Record<'name' | 'code' | 'className' | 'data' | 'errors', unknown>>
+
+        this.name = reason === 'server' && typeof server.name === 'string' ? server.name : 'WriteError'
+        this.reason = reason
+        this.code = typeof server.code === 'number' ? server.code : undefined
+        this.className = typeof server.className === 'string' ? server.className : undefined
+        this.data = server.data
+        this.errors = server.errors ?? (Array.isArray(server.data) ? server.data : undefined)
+    }
+}
+
 /** How many records of the first page are kept, when the service is not loaded whole. */
 export const FIRST_PAGE = 25
 
@@ -35,6 +68,7 @@ export class ServiceView {
     readonly path: string
 
     readonly #connection: ViewConnection
+    readonly #isReadOnly: () => boolean
     // The setup's ID field, if the user named one
     readonly #setIdField: string | undefined
     readonly #load: ServiceSetup['load']
@@ -53,10 +87,11 @@ export class ServiceView {
     #readCount = 0
     #destroyed = false
 
-    constructor(service: ServiceSetup, connection: ViewConnection) {
+    constructor(service: ServiceSetup, connection: ViewConnection, options: ViewOptions = {}) {
         this.serviceId = service.id
         this.path = service.path
         this.#connection = connection
+        this.#isReadOnly = options.isReadOnly ?? (() => false)
         this.#setIdField = service.idField
         this.#load = service.load
         this.#idField.value = service.idField
@@ -169,9 +204,52 @@ export class ServiceView {
         this.#status.value = { phase: this.records ? 'stale' : 'waiting' }
     }
 
+    /** Creates a record. Resolves with the server's answer; what the view holds changes only by the event after it. */
+    create(raw: Record<string, unknown>): Promise<RecordEnvelope> {
+        return this.#write(source => source.create({ raw }))
+    }
+
+    /** Changes the top-level fields of a record that `part` has, and no others. As `create()`, by the event. */
+    patch(id: string, part: Record<string, unknown>): Promise<RecordEnvelope> {
+        return this.#write(source => source.patch(id, { raw: part }))
+    }
+
+    /** Puts `raw` in place of the whole record. As `create()`, by the event. */
+    update(id: string, raw: Record<string, unknown>): Promise<RecordEnvelope> {
+        return this.#write(source => source.update(id, { id, raw }))
+    }
+
+    /** Removes a record. As `create()`, by the event. */
+    remove(id: string): Promise<RecordEnvelope> {
+        return this.#write(source => source.remove(id))
+    }
+
     destroy(): void {
         this.follow('closed')
         this.#destroyed = true
+    }
+
+    // A write, through a record source of envelopes; refused before any call when it cannot be made
+    async #write(call: (source: RecordSource<RecordEnvelope>) => Promise<RecordEnvelope>): Promise<RecordEnvelope> {
+        const idField = this.#idField.value
+
+        if (this.#isReadOnly()) {
+            throw new WriteError(`The server is read-only: nothing is written to "${this.path}"`, 'read-only')
+        }
+        if (this.#destroyed || !this.#isSessionReady) {
+            throw new WriteError(`Not connected: nothing is written to "${this.path}"`, 'not-ready')
+        }
+        if (idField === undefined) {
+            throw new WriteError(`The ID field of "${this.path}" is not known: nothing is written`, 'not-ready')
+        }
+
+        try {
+            return await call(
+                this.#connection.recordSource(this.path, { convert: envelopeConversion(idField), idField }),
+            )
+        } catch (error) {
+            throw new WriteError(error instanceof Error ? error.message : String(error), 'server', error)
+        }
     }
 }
 
