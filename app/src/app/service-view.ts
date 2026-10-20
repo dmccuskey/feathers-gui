@@ -1,6 +1,7 @@
 // One service of the session: what the service area shows of it. Nothing is read until it is first shown. Its first
 // read is the probe; a service small enough is then loaded whole, and kept current by the events from then on
-// (ADR 006). Any other shows the probe's first page, read again each time it is shown, until the paged loader.
+// (ADR 006). Any other shows the probe's first page, read again each time it is shown, until the paged loader. The ID
+// field of an empty service is guessed again from the first record by event that does not fit the guess.
 import type { RecordSource } from 'live-system/core'
 import { shallowRef } from 'vue'
 import { envelopeConversion, rawConversion } from './envelope.ts'
@@ -148,8 +149,14 @@ export class ServiceView {
             this.#total.value = probed.total
 
             if (loadsWhole(this.#load, probed)) {
-                const loader = new WholeLoader(
-                    this.#connection.recordSource(this.path, { convert: envelopeConversion(idField), idField }),
+                // A guess made on no records may not fit the first ones to come by event: they are then guessed from
+                const guessesAgain = this.idFieldGuessed && probed.records.length === 0
+                const loader: WholeLoader = new WholeLoader(
+                    this.#connection.recordSource(this.path, {
+                        convert: envelopeConversion(idField),
+                        idField,
+                        ...(guessesAgain ? { onEventError: () => this.#guessAgain(loader) } : {}),
+                    }),
                 )
 
                 this.#loading = loader
@@ -227,6 +234,19 @@ export class ServiceView {
     destroy(): void {
         this.follow('closed')
         this.#destroyed = true
+    }
+
+    // The probe again, for a new guess of the ID field, in place of `loader`, the empty service's
+    #guessAgain(loader: RecordLoader): void {
+        if (this.#loader.value !== loader && this.#loading !== loader) return
+
+        // A first load under way is ignored when it ends
+        this.#readCount++
+        this.#loading = undefined
+        this.#loader.value = undefined
+        void loader.stop()
+        this.#status.value = { phase: 'waiting' }
+        void this.read()
     }
 
     // A write, through a record source of envelopes; refused before any call when it cannot be made

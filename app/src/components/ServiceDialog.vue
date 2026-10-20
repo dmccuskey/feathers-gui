@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// A service of the current server: its path, and how its records are loaded (ADR 006).
+// A service of the current server: its path, its ID field, and how its records are loaded (ADR 006).
 import { computed, ref } from 'vue'
 import type { ServiceDialogAnswer, ServiceDialogInput } from '../app/app.ts'
 import type { ServiceSetup } from '../app/setup.ts'
@@ -17,8 +17,17 @@ const LOADS: readonly { value: ServiceSetup['load']; label: string; text: string
 ]
 
 const path = ref(props.input.service?.path ?? '')
+const idField = ref(props.input.service?.idField ?? '')
 const load = ref(props.input.service?.load ?? 'auto')
 const tried = ref(false)
+
+const idFieldPlaceholder = computed(() => {
+    const guessed = props.input.guessedIdField
+
+    if (guessed === null) return 'Neither id nor _id: name it'
+
+    return guessed === undefined ? 'Guessed' : `Guessed as '${guessed}'`
+})
 
 // A path is the same with or without the slashes around it.
 const cleanPath = computed(() => path.value.trim().replace(/^\/+|\/+$/g, ''))
@@ -32,7 +41,9 @@ const pathError = computed(() => {
 function submit(): void {
     tried.value = true
 
-    if (!pathError.value) emit('answer', { path: cleanPath.value, load: load.value })
+    if (!pathError.value) {
+        emit('answer', { path: cleanPath.value, load: load.value, idField: idField.value.trim() || undefined })
+    }
 }
 </script>
 
@@ -44,6 +55,14 @@ function submit(): void {
             :error="tried ? pathError : undefined"
         >
             <UiInput v-model="path" class="service-dialog-path" v-bind="PLAIN_INPUT" autofocus />
+        </UiField>
+        <UiField label="ID field" hint="Left blank, it is guessed: id, else _id.">
+            <UiInput
+                v-model="idField"
+                class="service-dialog-id-field"
+                v-bind="PLAIN_INPUT"
+                :placeholder="idFieldPlaceholder"
+            />
         </UiField>
         <fieldset class="service-dialog-loads">
             <legend>Loading</legend>
@@ -63,7 +82,8 @@ function submit(): void {
 </template>
 
 <style>
-.service-dialog-path {
+.service-dialog-path,
+.service-dialog-id-field {
     font-family: var(--ui-mono);
 }
 

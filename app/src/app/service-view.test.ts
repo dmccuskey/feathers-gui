@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test'
+import { expect, spyOn, test } from 'bun:test'
 import { FakeBrowser } from '../../test-support/fake-browser.ts'
 import { fakeConnection, type FakeConnection, type FakeConnectionOptions } from '../../test-support/fake-connection.ts'
 import { Secrets } from './secrets.ts'
@@ -138,6 +138,66 @@ test('a service with a count of at most 1000 is loaded whole, and is not read ag
     services.messages = [{ id: 'other' }]
     await view.read()
     expect(idsOf(made, 'messages')).toHaveLength(40)
+})
+
+test('an empty service guesses its ID field again from the first record by event that does not fit', async () => {
+    const services: Record<string, unknown> = { guessed: [], named: [] }
+    const made = makeSession({ services }, ['guessed', 'named'])
+    const named = made.setup.servicesOf(made.server.id).find(each => each.path === 'named')!
+
+    made.setup.updateService(named.id, { idField: 'id' })
+    await settled()
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+    await settled()
+
+    const [guessed, set] = made.session.views
+
+    expect([guessed?.idField, set?.idField]).toEqual(['id', 'id'])
+
+    services.guessed = [{ _id: 'a' }]
+    services.named = [{ _id: 'a' }]
+    // The record of `named` is left out, and the record source logs it
+    const logged = spyOn(console, 'error').mockImplementation(() => {})
+
+    made.connection.emit('guessed', 'created', { _id: 'a' })
+    made.connection.emit('named', 'created', { _id: 'a' })
+    await settled()
+    await settled()
+    logged.mockRestore()
+
+    expect(guessed?.idField).toBe('_id')
+    expect(guessed?.isWhole).toBe(true)
+    expect(idsOf(made, 'guessed')).toEqual(['a'])
+    expect(set?.idField).toBe('id')
+    expect(idsOf(made, 'named')).toEqual([])
+})
+
+test('a guess made on records, or one that fits the first record by event, stays', async () => {
+    const services: Record<string, unknown> = { filled: [{ id: 1 }], empty: [] }
+    const made = makeSession({ services }, ['filled', 'empty'])
+    const logged = spyOn(console, 'error').mockImplementation(() => {})
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+    await settled()
+
+    services.filled = [{ id: 1 }, { _id: 'b' }]
+    services.empty = [{ id: 2 }]
+    made.connection.emit('filled', 'created', { _id: 'b' })
+    made.connection.emit('empty', 'created', { id: 2 })
+    await settled()
+    // The record that does not fit is left out, and the record source logs it
+    const logs = logged.mock.calls.length
+
+    logged.mockRestore()
+    expect(logs).toBe(1)
+
+    expect(made.session.views.map(view => view.idField)).toEqual(['id', 'id'])
+    expect(idsOf(made, 'filled')).toEqual(['1'])
+    expect(idsOf(made, 'empty')).toEqual(['2'])
 })
 
 test('a service set to be paged, or over 1000, or with no count, shows the first 25 records', async () => {
