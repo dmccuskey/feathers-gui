@@ -1,7 +1,8 @@
 // One service of the session: what the service area shows of it. Nothing is read until it is first shown. Its first
 // read is the probe; a service small enough is then loaded whole, and kept current by the events from then on
 // (ADR 006). Any other shows the probe's first page, read again each time it is shown, until the paged loader. The ID
-// field of an empty service is guessed again from the first record by event that does not fit the guess.
+// field of an empty service is guessed again from the first record by event that does not fit the guess. The view
+// holds the selection: an ID, kept whatever happens to the record, until the ID field is guessed again.
 import type { RecordSource } from 'live-system/core'
 import { shallowRef } from 'vue'
 import { envelopeConversion, rawConversion } from './envelope.ts'
@@ -79,6 +80,7 @@ export class ServiceView {
     // The first page, when there is no loader
     readonly #records = shallowRef<readonly RecordEnvelope[] | null>(null)
     readonly #loader = shallowRef<RecordLoader | undefined>(undefined)
+    readonly #selectedId = shallowRef<string | null>(null)
     // A loader whose first load is under way
     #loading: RecordLoader | undefined
     #isSessionReady = false
@@ -126,6 +128,31 @@ export class ServiceView {
     /** Reactive. Whether the view holds every record, kept current by the events. */
     get isWhole(): boolean {
         return this.#loader.value !== undefined
+    }
+
+    /** Reactive. The ID of the record selected, or `null`. It need not be one the view holds. */
+    get selectedId(): string | null {
+        return this.#selectedId.value
+    }
+
+    /**
+     * Reactive. The record selected, from what the view holds: `undefined` when it is not held, such as one removed,
+     * not on the first page, or dropped for a login. It comes back with the record.
+     */
+    get selected(): RecordEnvelope | undefined {
+        const id = this.#selectedId.value
+
+        return id === null ? undefined : this.record(id)
+    }
+
+    /** Reactive. A record the view holds, by its ID: no call. */
+    record(id: string): RecordEnvelope | undefined {
+        return this.#loader.value ? this.#loader.value.record(id) : this.#records.value?.find(each => each.id === id)
+    }
+
+    /** Selects a record by its ID, or none with `null`. */
+    select(id: string | null): void {
+        this.#selectedId.value = id
     }
 
     /**
@@ -244,6 +271,8 @@ export class ServiceView {
         this.#readCount++
         this.#loading = undefined
         this.#loader.value = undefined
+        // An ID under the old guess means nothing under the new one
+        this.#selectedId.value = null
         void loader.stop()
         this.#status.value = { phase: 'waiting' }
         void this.read()
