@@ -1,11 +1,12 @@
 <script setup lang="ts">
 // The area of the current service. Until there is one, it says what is missing and offers the way to it. Of the
-// service it shows its view's records as they are, under a line of how many and whether they are live; a view not
+// service it shows its view's records in the table, under a line of how many and whether they are live; a view not
 // loaded whole is read again each time the service is chosen. The records stay, dimmed, while the connection is being
 // brought back.
 import { computed, onUnmounted, watch } from 'vue'
 import { useApp } from '../app/app.ts'
 import { UiButton } from '../widgets/index.ts'
+import RecordsViewer from './RecordsViewer.vue'
 import ServiceDot from './ServiceDot.vue'
 import { viewLine } from './view-status.ts'
 
@@ -62,7 +63,6 @@ onUnmounted(() => view.value?.shown(false))
         <div v-else-if="!service" class="service-area-empty">
             <p>No service is chosen. Choose one in the side bar.</p>
         </div>
-        <!-- The service view comes here. -->
         <template v-else>
             <h2 class="service-area-path">{{ service.path }}</h2>
             <p
@@ -86,9 +86,9 @@ onUnmounted(() => view.value?.shown(false))
                     {{ line }}
                 </p>
                 <p v-if="records.length === 0" class="service-area-status">No records.</p>
-                <ol v-else class="service-area-records" :class="{ 'service-area-stale': status?.phase !== 'ready' }">
-                    <li v-for="record in records" :key="record.id">{{ JSON.stringify(record.raw) }}</li>
-                </ol>
+                <div v-else class="service-area-records" :class="{ 'service-area-stale': status?.phase !== 'ready' }">
+                    <RecordsViewer v-if="view" :view="view" :records="records" :fields="service.fields" />
+                </div>
             </template>
         </template>
     </section>
@@ -150,20 +150,12 @@ onUnmounted(() => view.value?.shown(false))
 }
 
 .service-area-records {
-    margin: calc(var(--ui-space) * 2) 0 0;
-    padding: 0;
-    list-style: none;
-    font-family: var(--ui-mono);
-    font-size: 0.9em;
+    flex: 1 1 0;
+    min-height: 0;
+    margin-top: calc(var(--ui-space) * 2);
 }
 
 .service-area-stale {
     opacity: 0.5;
-}
-
-.service-area-records li {
-    padding: calc(var(--ui-space) * 0.5) 0;
-    border-bottom: 1px solid var(--ui-border);
-    overflow-wrap: anywhere;
 }
 </style>
