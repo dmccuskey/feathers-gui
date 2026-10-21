@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { columnsOf, guessType } from './columns.ts'
+import { columnsOf, fieldTypeOf, guessType } from './columns.ts'
 import type { FieldSetup } from './setup.ts'
 
 const records = (...raws: Record<string, unknown>[]) => raws.map((raw, index) => ({ id: String(index), raw }))
@@ -47,4 +47,12 @@ test('the setup’s fields come after the ID field, in its order and with its ty
     const columns = columnsOf(records({ id: 1, text: 'a', secret: 'x', read: false }), 'id', fields)
 
     expect(shape(columns)).toEqual(['id:number', 'read:string', 'missing:date', 'text:string'])
+})
+
+test('one field’s type: the setup’s, or else its first value that is not null', () => {
+    const held = records({ id: 1, at: null }, { id: 2, at: '2026-10-20' })
+
+    expect(fieldTypeOf(held, 'at').name).toBe('date')
+    expect(fieldTypeOf(held, 'at', [{ name: 'at', show: true, type: 'string', typePicked: true }]).name).toBe('string')
+    expect(fieldTypeOf(held, 'gone').name).toBe('string')
 })

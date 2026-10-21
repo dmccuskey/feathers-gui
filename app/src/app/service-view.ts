@@ -3,13 +3,16 @@
 // (ADR 006). Any other shows the probe's first page, read again each time it is shown, until the paged loader. The ID
 // field of an empty service is guessed again from the first record by event that does not fit the guess. The view
 // holds the selection: an ID, kept whatever happens to the record, until the ID field is guessed again. It counts the
-// records that change while it is loaded whole, and marks a change made while it is not shown, until it is.
+// records that change while it is loaded whole, and marks a change made while it is not shown, until it is. It holds
+// the sort, which the setup keeps, and shows its records in that order.
 import type { RecordSource } from 'live-system/core'
-import { shallowRef } from 'vue'
+import { computed, shallowRef, type ShallowRef } from 'vue'
+import { fieldTypeOf } from './columns.ts'
 import { envelopeConversion, rawConversion } from './envelope.ts'
 import { guessIdField, probe, type ProbeResult } from './probe.ts'
 import type { RecordEnvelope, SessionConnection, SessionPhase } from './session.ts'
-import type { ServiceSetup } from './setup.ts'
+import type { FieldSetup, ServiceSetup, ViewSort } from './setup.ts'
+import { sortRecords } from './sort.ts'
 import { WholeLoader, type RecordLoader } from './whole-loader.ts'
 
 export type ViewPhase =
@@ -31,6 +34,10 @@ export type ViewConnection = Pick<SessionConnection, 'service' | 'recordSource'>
 export interface ViewOptions {
     /** Whether the server is set read-only, asked at each write. Default: never. */
     isReadOnly?: () => boolean
+    /** The service's fields in the setup, as they are now: a sort by one takes its type. Default: those made with. */
+    fields?: () => readonly FieldSetup[]
+    /** Keeps a sort the view is given, in the setup. Default: it is not kept. */
+    saveSort?: (sort: ViewSort) => void
 }
 
 /**
@@ -72,6 +79,8 @@ export class ServiceView {
 
     readonly #connection: ViewConnection
     readonly #isReadOnly: () => boolean
+    readonly #fields: () => readonly FieldSetup[]
+    readonly #saveSort: (sort: ViewSort) => void
     // The setup's ID field, if the user named one
     readonly #setIdField: string | undefined
     readonly #load: ServiceSetup['load']
@@ -84,6 +93,10 @@ export class ServiceView {
     readonly #selectedId = shallowRef<string | null>(null)
     readonly #changeCount = shallowRef(0)
     readonly #hasUnseenChanges = shallowRef(false)
+    readonly #sort: ShallowRef<ViewSort>
+    // When each record of the loader last changed, by `#changeCount`: read with it, as it is not reactive itself
+    #changes = new Map<string, number>()
+    readonly #rows = computed(() => this.#sorted())
     #isShown = false
     // A loader whose first load is under way
     #loading: RecordLoader | undefined
@@ -99,6 +112,9 @@ export class ServiceView {
         this.path = service.path
         this.#connection = connection
         this.#isReadOnly = options.isReadOnly ?? (() => false)
+        this.#fields = options.fields ?? (() => service.fields)
+        this.#saveSort = options.saveSort ?? (() => {})
+        this.#sort = shallowRef<ViewSort>(service.sort ?? { by: 'last-changed' })
         this.#setIdField = service.idField
         this.#load = service.load
         this.#idField.value = service.idField
@@ -127,6 +143,22 @@ export class ServiceView {
     /** Reactive. Every record, when loaded whole; else the first page. `null` before there are any. */
     get records(): readonly RecordEnvelope[] | null {
         return this.#loader.value?.rows ?? this.#records.value
+    }
+
+    /** Reactive. The records, in the order of the sort. `null` before there are any. */
+    get rows(): readonly RecordEnvelope[] | null {
+        return this.#rows.value
+    }
+
+    /** Reactive. How the records are sorted: by last changed, unless the setup or `setSort()` says otherwise. */
+    get sort(): ViewSort {
+        return this.#sort.value
+    }
+
+    /** Sorts the records, and keeps the sort in the setup. */
+    setSort(sort: ViewSort): void {
+        this.#sort.value = sort
+        this.#saveSort(sort)
     }
 
     /** Reactive. Whether the view holds every record, kept current by the events. */
@@ -204,7 +236,7 @@ export class ServiceView {
                         idField,
                         ...(guessesAgain ? { onEventError: () => this.#guessAgain(loader) } : {}),
                     }),
-                    () => this.#changed(loader),
+                    id => this.#changed(loader, id),
                 )
 
                 this.#loading = loader
@@ -212,6 +244,7 @@ export class ServiceView {
                 // Stopped by follow(), which made the read stale
                 if (count !== this.#readCount) return
                 this.#loading = undefined
+                this.#changes = new Map()
                 this.#loader.value = loader
                 this.#records.value = null
             } else {
@@ -285,10 +318,27 @@ export class ServiceView {
         this.#destroyed = true
     }
 
+    // `records`, sorted. Last changed is by the changes the loader has seen: a first page has none, so is in ID order.
+    #sorted(): readonly RecordEnvelope[] | null {
+        const records = this.records
+        const sort = this.#sort.value
+
+        if (!records) return null
+        // Each change moves a record to the top
+        if (sort.by === 'last-changed') void this.#changeCount.value
+
+        return sortRecords(records, sort, {
+            idField: this.#idField.value,
+            typeOf: field => fieldTypeOf(records, field, this.#fields()),
+            changes: this.#changes,
+        })
+    }
+
     // A record of `loader` changed
-    #changed(loader: RecordLoader): void {
+    #changed(loader: RecordLoader, id: string): void {
         if (this.#loader.value !== loader) return
 
+        this.#changes.set(id, this.#changeCount.value + 1)
         this.#changeCount.value++
         if (!this.#isShown) this.#hasUnseenChanges.value = true
     }

@@ -23,6 +23,21 @@ export function guessType(value: unknown): FieldTypeDefinition {
     return GUESSED.find(type => type.show(value) !== undefined) ?? fieldType('string')
 }
 
+/** The type of one field of `records`, as its column has it: the setup's, or else guessed. */
+export function fieldTypeOf(
+    records: readonly RecordEnvelope[],
+    name: string,
+    fields: readonly FieldSetup[] = [],
+): FieldTypeDefinition {
+    const field = fields.find(each => each.name === name)
+
+    if (field) return fieldType(field.type)
+
+    const first = records.find(record => record.raw[name] !== null && record.raw[name] !== undefined)
+
+    return guessType(first?.raw[name])
+}
+
 /** The columns of `records`, as the module's head says. */
 export function columnsOf(
     records: readonly RecordEnvelope[],

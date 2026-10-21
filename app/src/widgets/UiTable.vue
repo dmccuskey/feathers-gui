@@ -1,9 +1,10 @@
 <script setup lang="ts" generic="T">
 // A table of rows of one height that draws only the rows in view, and a few either side: ten thousand rows are a
 // few dozen in the page. Its header stays as the rows scroll under it. One row is selected, by a click or by the
-// keyboard (the arrows, Page Up and Down, Home and End); Enter or a double click activates it. It fills the box
-// it is put in, and scrolls in it.
-import { computed, onBeforeUnmount, onMounted, ref, useId, useTemplateRef } from 'vue'
+// keyboard (the arrows, Page Up and Down, Home and End); Enter or a double click activates it. A sortable table's
+// headers are buttons that ask for a sort; the rows come sorted, and the table only marks the column. It fills the
+// box it is put in, and scrolls in it.
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, useTemplateRef } from 'vue'
 import { rowForKey, rowWindow, scrollToRow, type TableColumn } from './table.ts'
 
 const props = withDefaults(
@@ -16,13 +17,20 @@ const props = withDefaults(
         rowHeight?: number
         /** What the table is named for a screen reader. */
         label?: string
+        /** Whether a click on a header asks for a sort by its column. */
+        sortable?: boolean
+        /** The column the rows are sorted by, which its header marks. */
+        sortKey?: string
+        sortDescending?: boolean
     }>(),
-    { rowHeight: 28, label: undefined },
+    { rowHeight: 28, label: undefined, sortable: false, sortKey: undefined, sortDescending: false },
 )
 
 const emit = defineEmits<{
     /** Enter on the selected row, or a double click on a row. */
     activate: [row: T]
+    /** A header clicked, of a sortable table: its column's key. */
+    sort: [key: string]
 }>()
 
 /** The key of the row selected. */
@@ -83,6 +91,23 @@ function select(index: number): void {
     }
 }
 
+function ariaSort(key: string): 'ascending' | 'descending' | undefined {
+    if (key !== props.sortKey) return undefined
+    return props.sortDescending ? 'descending' : 'ascending'
+}
+
+/** Scrolls the row selected into view, once the rows given are drawn: after a sort, say. */
+async function showSelected(): Promise<void> {
+    await nextTick()
+    const box = scroller.value
+    if (!box || selectedIndex.value < 0) return
+
+    box.scrollTop = scrollToRow(selectedIndex.value, box.scrollTop, viewHeight.value, props.rowHeight)
+    scrollTop.value = box.scrollTop
+}
+
+defineExpose({ showSelected })
+
 function onKeydown(event: KeyboardEvent): void {
     if (event.key === 'Enter') {
         const row = props.rows[selectedIndex.value]
@@ -139,8 +164,15 @@ onBeforeUnmount(() => observer?.disconnect())
                     class="ui-table-cell"
                     :class="{ 'ui-table-end': column.align === 'end' }"
                     role="columnheader"
+                    :aria-sort="ariaSort(column.key)"
                 >
-                    {{ column.label }}
+                    <button v-if="sortable" class="ui-table-sort" type="button" @click="emit('sort', column.key)">
+                        <span class="ui-table-label">{{ column.label }}</span>
+                        <span v-if="column.key === sortKey" class="ui-table-arrow" aria-hidden="true">
+                            {{ sortDescending ? '▼' : '▲' }}
+                        </span>
+                    </button>
+                    <template v-else>{{ column.label }}</template>
                 </div>
             </div>
             <div class="ui-table-body" :style="{ height: `${rows.length * rowHeight}px` }">
@@ -240,6 +272,39 @@ onBeforeUnmount(() => observer?.disconnect())
 
 .ui-table-end {
     text-align: right;
+}
+
+.ui-table-sort {
+    display: flex;
+    gap: 0.4em;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: inherit;
+    cursor: pointer;
+}
+
+.ui-table-end .ui-table-sort {
+    flex-direction: row-reverse;
+}
+
+.ui-table-sort:hover {
+    color: var(--ui-text);
+}
+
+.ui-table-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ui-table-arrow {
+    flex: none;
+    color: var(--ui-accent);
+    font-size: 0.8em;
 }
 
 .ui-table-shown .ui-table-row:hover {

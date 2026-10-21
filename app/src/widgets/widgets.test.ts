@@ -7,6 +7,7 @@ import UiDialog from './UiDialog.vue'
 import UiField from './UiField.vue'
 import UiInput from './UiInput.vue'
 import UiSelect from './UiSelect.vue'
+import UiTable from './UiTable.vue'
 
 test('a button is a native button that does not submit, unless it is told to', () => {
     const plain = mount(UiButton, { slots: { default: 'Cancel' } })
@@ -145,4 +146,17 @@ test('the submit button of a dialog submits it, and nothing leaves the page', as
     expect((wrapper.element as HTMLDialogElement).open).toBe(true)
 
     wrapper.unmount()
+})
+
+test('a sortable table’s headers ask for a sort by their column; another table’s are plain', async () => {
+    const columns = [{ key: 'n', label: 'N', text: (row: unknown) => String((row as { n: number }).n) }]
+    const props = { columns, rows: [{ n: 1 }], rowKey: (row: unknown) => (row as { n: number }).n }
+    const sortable = mount(UiTable, { props: { ...props, sortable: true, sortKey: 'n', sortDescending: true } })
+
+    await sortable.find('[role="columnheader"] button').trigger('click')
+    expect(sortable.emitted('sort')).toEqual([['n']])
+    expect(sortable.find('[role="columnheader"]').attributes('aria-sort')).toBe('descending')
+    expect(sortable.find('[role="columnheader"]').text()).toBe('N▼')
+
+    expect(mount(UiTable, { props }).find('[role="columnheader"] button').exists()).toBe(false)
 })

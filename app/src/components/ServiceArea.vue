@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // The area of the current service. Until there is one, it says what is missing and offers the way to it. Of the
-// service it shows its view's records in the table, under a line of how many and whether they are live; a view not
-// loaded whole is read again each time the service is chosen. The records stay, dimmed, while the connection is being
+// service it shows its view's records in the table, under a line of how many and whether they are live, and, for a
+// view loaded whole, the way back to sorting by last changed; a view not loaded whole is read again each time the
+// service is chosen. The records stay, dimmed, while the connection is being
 // brought back.
 import { computed, onUnmounted, watch } from 'vue'
 import { useApp } from '../app/app.ts'
@@ -24,6 +25,7 @@ const service = computed(() => {
 const status = computed(() => app.session?.status)
 const view = computed(() => (service.value ? app.session?.view(service.value.id) : undefined))
 const records = computed(() => view.value?.records ?? null)
+const lastChanged = computed(() => view.value?.sort.by === 'last-changed')
 const failure = computed(() => view.value?.status.error?.message ?? null)
 const line = computed(() => (view.value ? viewLine(view.value, status.value?.phase) : undefined))
 
@@ -81,13 +83,32 @@ onUnmounted(() => view.value?.shown(false))
             <p v-else-if="!records && status?.phase === 'lost'" class="service-area-status">Connection lost.</p>
             <p v-else-if="!records" class="service-area-status">Loading…</p>
             <template v-else>
-                <p v-if="line" class="service-area-line" role="status">
-                    <ServiceDot v-if="view?.isWhole" :view="view" />
-                    {{ line }}
-                </p>
+                <div v-if="line" class="service-area-bar">
+                    <p class="service-area-line" role="status">
+                        <ServiceDot v-if="view?.isWhole" :view="view" />
+                        {{ line }}
+                    </p>
+                    <UiButton
+                        v-if="view?.isWhole"
+                        class="service-area-last-changed"
+                        :class="{ 'service-area-on': lastChanged }"
+                        variant="quiet"
+                        :aria-pressed="lastChanged"
+                        title="Sort by the changes seen, the latest first"
+                        @click="view.setSort({ by: 'last-changed' })"
+                    >
+                        Last changed
+                    </UiButton>
+                </div>
                 <p v-if="records.length === 0" class="service-area-status">No records.</p>
                 <div v-else class="service-area-records" :class="{ 'service-area-stale': status?.phase !== 'ready' }">
-                    <RecordsViewer v-if="view" :view="view" :records="records" :fields="service.fields" />
+                    <RecordsViewer
+                        v-if="view"
+                        :view="view"
+                        :records="records"
+                        :rows="view.rows ?? records"
+                        :fields="service.fields"
+                    />
                 </div>
             </template>
         </template>
@@ -140,13 +161,32 @@ onUnmounted(() => view.value?.shown(false))
     color: var(--ui-muted);
 }
 
+.service-area-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space);
+    margin: var(--ui-space) 0 0;
+}
+
 .service-area-line {
     display: flex;
     align-items: center;
     gap: 0.5em;
-    margin: var(--ui-space) 0 0;
+    margin: 0;
     color: var(--ui-muted);
     font-size: 0.86em;
+}
+
+.service-area-last-changed {
+    min-height: auto;
+    padding-block: 0.2em;
+    color: var(--ui-muted);
+    font-size: 0.86em;
+}
+
+.service-area-last-changed.service-area-on {
+    color: var(--ui-accent);
 }
 
 .service-area-records {

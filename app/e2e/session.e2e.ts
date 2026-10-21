@@ -248,3 +248,28 @@ test('a record is selected by a click and by the keyboard, and stays selected wh
     await page.locator('.side-bar-path', { hasText: 'messages' }).click()
     await selected.filter({ hasText: 'Message number 4' }).waitFor()
 }, 30_000)
+
+test('a click on a header sorts by its column, and Last changed puts a record changed elsewhere on top', async () => {
+    const page = await openApp(await newContext(storedSetup(['messages', 'notes']), 'messages'))
+    const header = page.locator('.service-area-records [role="columnheader"]', { hasText: 'id' }).first()
+
+    await loggedIn(page)
+    await records(page).first().filter({ hasText: 'Message number 1' }).waitFor()
+
+    await header.getByRole('button').click()
+    await header.getByRole('button').click()
+    await page.locator('[role="columnheader"][aria-sort="descending"]').waitFor()
+    await records(page).first().filter({ hasText: 'Message number 25' }).waitFor()
+
+    await page.getByRole('button', { name: 'Last changed' }).click()
+    await records(page).first().filter({ hasText: 'Message number 1' }).waitFor()
+
+    const answer = await fetch(`${SERVER_URL}/messages/7`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'Changed just now' }),
+    })
+
+    expect(answer.ok).toBe(true)
+    await records(page).first().filter({ hasText: 'Changed just now' }).waitFor()
+}, 30_000)

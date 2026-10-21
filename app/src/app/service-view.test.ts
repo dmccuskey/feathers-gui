@@ -489,6 +489,69 @@ test('a change by event is counted, and marked unseen while the view is not show
     expect(messages.hasUnseenChanges).toBe(false)
 })
 
+test('the rows are by last changed to begin with: the changes newest first, then the rest in ID order', async () => {
+    const made = makeSession({ services: { messages: [{ id: 10 }, { id: 2 }, { id: 1 }] } }, ['messages'])
+    const view = made.session.views[0]!
+    const rows = () => view.rows?.map(record => record.id)
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+    expect(view.sort).toEqual({ by: 'last-changed' })
+    expect(rows()).toEqual(['1', '2', '10'])
+
+    made.connection.emit('messages', 'patched', { id: 2, text: 'B' })
+    made.connection.emit('messages', 'created', { id: 5 })
+    await settled()
+    expect(rows()).toEqual(['5', '2', '1', '10'])
+
+    made.connection.emit('messages', 'patched', { id: 10, text: 'C' })
+    await settled()
+    expect(rows()).toEqual(['10', '5', '2', '1'])
+})
+
+test('a sort by a field orders the rows by its type, and is kept in the setup, which the next view starts from', async () => {
+    const made = makeSession({ services: { messages: [{ id: 1, n: 10 }, { id: 2, n: 9 }, { id: 3 }] } }, ['messages'])
+    const view = made.session.views[0]!
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+    view.setSort({ by: 'field', field: 'n', descending: false })
+    expect(view.rows?.map(record => record.id)).toEqual(['2', '1', '3'])
+    // The same view: a sort is not a change of the service's view
+    expect(made.session.views[0]).toBe(view)
+
+    const [service] = made.setup.servicesOf(made.server.id)
+    expect(service?.sort).toEqual({ by: 'field', field: 'n', descending: false })
+
+    made.session.destroy()
+    const again = makeSession({}, [])
+    again.setup.addService({ ...service!, serverId: again.server.id })
+    await settled()
+    expect(again.session.views[0]?.sort).toEqual({ by: 'field', field: 'n', descending: false })
+})
+
+test('a sort by a field takes the type the setup gives it, or else guesses it', async () => {
+    // The first is the earlier time, but not the earlier string
+    const times = [
+        { id: 1, at: '2026-10-20T10:00:00+02:00' },
+        { id: 2, at: '2026-10-20T09:00:00Z' },
+    ]
+    const made = makeSession({ services: { messages: times } }, ['messages'])
+    const service = made.setup.servicesOf(made.server.id)[0]!
+    const view = made.session.views[0]!
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+    view.setSort({ by: 'field', field: 'at', descending: false })
+    expect(view.rows?.map(record => record.id)).toEqual(['1', '2'])
+
+    made.setup.updateService(service.id, { fields: [{ name: 'at', show: true, type: 'string', typePicked: true }] })
+    expect(view.rows?.map(record => record.id)).toEqual(['2', '1'])
+})
+
 test('a view not loaded whole counts no changes', async () => {
     const made = makeSession({ services: { messages: [{ id: 1 }] } }, ['messages'])
 
