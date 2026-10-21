@@ -121,6 +121,8 @@ export class Session {
         this.#setup = parts.setup
         this.#secrets = parts.secrets
         this.#loginWait = parts.loginWait ?? LOGIN_WAIT
+        // Logged out of in this window before a reload: it stays so until a login
+        this.#isLoggedOut = parts.setup.isLoggedOut(server.id)
         this.#connection = (parts.makeConnection ?? makeConnection)(server)
         this.#machine = new StateMachine<SessionPhase>({
             initial: 'closed',
@@ -253,6 +255,7 @@ export class Session {
                 ? { username: login.username, secret: credentials.token, isOffered: true }
                 : { username: credentials.username, secret: credentials.password, isOffered: true }
         this.#isLoggedOut = false
+        this.#setup.setLoggedOut(this.serverId, false)
         if (phase === 'logging-in') void this.#logIn()
         else this.#want('logging-in')
 
@@ -277,11 +280,15 @@ export class Session {
         })
     }
 
-    /** Logs out, and forgets the secret held for this window. The session waits for `login()`. */
+    /**
+     * Logs out, and forgets the secret held for this window; a password remembered in the setup is kept. The session
+     * waits for `login()`, and so does the next session of this window, after a reload.
+     */
     async logout(): Promise<void> {
         if (!this.#loginSetup()) return
 
         this.#isLoggedOut = true
+        this.#setup.setLoggedOut(this.serverId, true)
         this.#isTokenKept = false
         this.#credentials = undefined
         this.#offered = undefined

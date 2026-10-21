@@ -885,3 +885,50 @@ test('no record is made or removed on a server set read-only: no dialog opens', 
     expect(app.dialogs.open).toEqual([])
     expect(connection.writes).toEqual([])
 })
+
+test('Log In logs in with the password remembered, without the dialog, and asks when the server refuses it', async () => {
+    const window = new FakeBrowser().open()
+    const app = new App({ storage: window, makeSession: fakeSessions({ password: 'secret' }), secrets: ALONE })
+    const server = app.setup.addServer({ ...SERVER, login: { ...LOGIN, remember: true, password: 'secret' } })
+
+    app.activateServer(server.id)
+    await settled()
+    expect(app.session?.status.phase).toBe('ready')
+
+    await app.logOut()
+    await app.logIn()
+    await settled()
+    expect(app.session?.status.phase).toBe('ready')
+    expect(loginDialog(app)).toBeUndefined()
+
+    // Changed on the server since it was remembered
+    await app.logOut()
+    app.setup.updateServer(server.id, { login: { ...LOGIN, remember: true, password: 'old' } })
+    void app.logIn()
+    await settled()
+    expect(loginDialog(app)?.input.reason).toBeDefined()
+})
+
+test('a server logged out of stays so through a reload, with no dialog by itself, until Log In', async () => {
+    const window = new FakeBrowser().open()
+    const options = { storage: window, makeSession: fakeSessions({ password: 'secret' }), secrets: ALONE }
+    const app = new App(options)
+    const server = app.setup.addServer({ ...SERVER, login: { ...LOGIN, remember: true, password: 'secret' } })
+
+    app.activateServer(server.id)
+    await settled()
+    await app.logOut()
+    app.destroy()
+
+    const reloaded = new App(options)
+
+    reloaded.activateServer(server.id)
+    await settled()
+    expect(reloaded.session?.status.phase).toBe('login-needed')
+    expect(loginDialog(reloaded)).toBeUndefined()
+
+    await reloaded.logIn()
+    await settled()
+    expect(reloaded.session?.status.phase).toBe('ready')
+    expect(reloaded.setup.isLoggedOut(server.id)).toBe(false)
+})

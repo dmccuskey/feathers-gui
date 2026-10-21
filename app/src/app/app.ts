@@ -164,7 +164,8 @@ export class App {
 
         this.#endSession()
         this.setup.currentServerId = serverId
-        this.#isLoginAsked = false
+        // Logged out of in this window: the dialog waits for Log In, after a reload too
+        this.#isLoginAsked = this.setup.isLoggedOut(serverId)
 
         const session = this.#makeSession(server, { setup: this.setup, secrets: this.secrets })
 
@@ -179,8 +180,9 @@ export class App {
     }
 
     /**
-     * Asks for the password or the token of the session's server, and logs in with it. The dialog stays until the
-     * server accepts it or the user cancels, and goes by itself when the session no longer waits for a login.
+     * Logs in with the password or the token remembered for the session's server, if there is one and the server has
+     * not refused it; else, or when it refuses it now, asks for one. The dialog stays until the server accepts it or
+     * the user cancels, and goes by itself when the session no longer waits for a login.
      */
     async logIn(): Promise<void> {
         const session = this.#session.value
@@ -192,7 +194,22 @@ export class App {
 
         this.#isLoginAsked = true
 
-        const reason = session.status.error?.message
+        let reason = session.status.error?.message
+
+        if (login.remember && login.password !== undefined && reason === undefined) {
+            try {
+                await session.login(
+                    login.kind === 'token'
+                        ? { token: login.password }
+                        : { username: login.username, password: login.password },
+                )
+
+                return
+            } catch (error) {
+                if (this.#session.value !== session || session.status.phase !== 'login-needed') return
+                reason = error instanceof Error ? error.message : String(error)
+            }
+        }
 
         await this.dialogs.show('login', {
             server: { ...server, login },

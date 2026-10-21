@@ -1,6 +1,7 @@
 <script setup lang="ts">
 // The state of the session with the current server, under the server's select: a dot, a line, the reason of the
-// last failure, and the button to log in or out, or to try again at once.
+// last failure, and the button to log in or out, or to try again at once. Log Out says when it keeps the password
+// remembered: Log In uses it again, and only editing the server forgets it.
 import { computed } from 'vue'
 import { useApp } from '../app/app.ts'
 import { UiButton } from '../widgets/index.ts'
@@ -8,10 +9,14 @@ import { statusText } from './session-status.ts'
 
 const app = useApp()
 
-const text = computed(() => {
-    const session = app.session
+const login = computed(() => (app.session ? app.setup.server(app.session.serverId)?.login : undefined))
+const text = computed(() => statusText(app.session?.status, login.value))
+const logOutTitle = computed(() => {
+    const what = login.value?.kind === 'token' ? 'token' : 'password'
 
-    return statusText(session?.status, session ? app.setup.server(session.serverId)?.login : undefined)
+    return login.value?.remember && login.value.password !== undefined
+        ? `Log out. The ${what} remembered on this computer is kept: Log In uses it.`
+        : 'Log out'
 })
 </script>
 
@@ -33,6 +38,7 @@ const text = computed(() => {
             v-else-if="text.action === 'log-out'"
             variant="quiet"
             class="session-status-button"
+            :title="logOutTitle"
             @click="app.logOut()"
             >Log Out</UiButton
         >
