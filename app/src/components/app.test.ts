@@ -152,6 +152,61 @@ test('a service chosen again is read again, when it is not loaded whole', async 
     expect(listed()).toEqual(['{"_id":"b"}'])
 })
 
+test('the records are under a line of how many, and whether they are live', async () => {
+    const services: Record<string, unknown> = { things: [{ _id: 'a' }, { _id: 'b' }], messages: [{ id: 1 }] }
+    const { app, wrapper } = mountApp({ services })
+    const server = addServer(app, 'local')
+    const things = addService(app, server, 'things', 'paged')
+    const messages = addService(app, server, 'messages')
+
+    app.activateServer(server.id)
+    app.setup.setCurrentService(server.id, things.id)
+    await flushPromises()
+    expect(wrapper.find('.service-area-line').text()).toBe('2 records · read when shown')
+
+    app.setup.setCurrentService(server.id, messages.id)
+    await flushPromises()
+    expect(wrapper.find('.service-area-line').text()).toBe('1 record · live')
+    expect(wrapper.find('.service-area-line .service-dot-live').exists()).toBe(true)
+})
+
+test("a service's dot marks it live, and a change not seen yet until it is chosen, pulsing at each change", async () => {
+    const connection = fakeConnection({ services: { things: [{ _id: 'a' }], messages: [{ id: 1 }] } })
+    const { app, wrapper } = mountApp(connection)
+    const server = addServer(app, 'local')
+    const messages = addService(app, server, 'messages')
+    const things = addService(app, server, 'things')
+    const dotOf = (path: string) =>
+        wrapper
+            .findAll('.side-bar-path')
+            .find(row => row.text() === path)!
+            .find('.service-dot')
+
+    app.activateServer(server.id)
+    app.setup.setCurrentService(server.id, messages.id)
+    await flushPromises()
+    app.setup.setCurrentService(server.id, things.id)
+    await flushPromises()
+    expect(dotOf('messages').classes()).toEqual(['service-dot', 'service-dot-live'])
+    expect(dotOf('messages').attributes('aria-label')).toBe('Live')
+
+    connection.emit('messages', 'patched', { id: 1, text: 'B' })
+    await flushPromises()
+    expect(dotOf('messages').classes()).toContain('service-dot-unseen')
+    expect(dotOf('messages').classes()).toContain('service-dot-pulse')
+    expect(dotOf('messages').attributes('aria-label')).toBe('Live, changed since last shown')
+
+    // The shown service pulses, and is not marked
+    connection.emit('things', 'created', { _id: 'b' })
+    await flushPromises()
+    expect(dotOf('things').classes()).toContain('service-dot-pulse')
+    expect(dotOf('things').classes()).not.toContain('service-dot-unseen')
+
+    app.setup.setCurrentService(server.id, messages.id)
+    await flushPromises()
+    expect(dotOf('messages').classes()).not.toContain('service-dot-unseen')
+})
+
 test('a service the server refuses shows the reason', async () => {
     const { app, wrapper } = mountApp()
     const server = addServer(app, 'local')
