@@ -552,6 +552,130 @@ test('a sort by a field takes the type the setup gives it, or else guesses it', 
     expect(view.rows?.map(record => record.id)).toEqual(['2', '1'])
 })
 
+test('a search shows only the records that have its words, follows the events, and is kept in the setup', async () => {
+    const made = makeSession(
+        {
+            services: {
+                messages: [
+                    { id: 1, text: 'Ann Johnson' },
+                    { id: 2, text: 'Bob Johnson' },
+                    { id: 3, text: 'Ann Lee' },
+                ],
+            },
+        },
+        ['messages'],
+    )
+    const view = made.session.views[0]!
+    const rows = () => view.rows?.map(record => record.id)
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+    expect(view.isSearching).toBe(false)
+
+    view.setSearch('ann')
+    expect(view.isSearching).toBe(true)
+    expect(rows()).toEqual(['1', '3'])
+    expect(view.records).toHaveLength(3)
+
+    made.connection.emit('messages', 'patched', { id: 2, text: 'Bob Annesley' })
+    made.connection.emit('messages', 'patched', { id: 3, text: 'Cy Lee' })
+    await settled()
+    expect(rows()).toEqual(['2', '1'])
+
+    view.setSearch('  ')
+    expect(view.isSearching).toBe(false)
+    expect(rows()).toHaveLength(3)
+
+    view.setSearch('johnson')
+    expect(made.session.views[0]).toBe(view)
+    const [service] = made.setup.servicesOf(made.server.id)
+    expect(service?.search).toBe('johnson')
+
+    made.session.destroy()
+    const again = makeSession({ services: { messages: [{ id: 1, text: 'Ann Johnson' }, { id: 2 }] } }, [])
+    again.setup.addService({ ...service!, serverId: again.server.id })
+    await settled()
+    const next = again.session.views[0]!
+    showAll(again.session)
+    await again.session.open()
+    await settled()
+    expect(next.search).toBe('johnson')
+    expect(next.rows?.map(record => record.id)).toEqual(['1'])
+})
+
+test('a search finds a value as its field type shows it', async () => {
+    process.env.TZ = 'UTC'
+    try {
+        const made = makeSession(
+            {
+                services: {
+                    messages: [
+                        { id: 1, at: 0 },
+                        { id: 2, at: 86_400_000 },
+                    ],
+                },
+            },
+            ['messages'],
+        )
+        const service = made.setup.servicesOf(made.server.id)[0]!
+        const view = made.session.views[0]!
+
+        showAll(made.session)
+        await made.session.open()
+        await settled()
+        // Milliseconds are guessed to be a number
+        view.setSearch('1970-01-02')
+        expect(view.rows).toEqual([])
+
+        made.setup.updateService(service.id, { fields: [{ name: 'at', show: true, type: 'date', typePicked: true }] })
+        expect(view.rows?.map(record => record.id)).toEqual(['2'])
+    } finally {
+        delete process.env.TZ
+    }
+})
+
+test('a search finds only what the table shows: a hidden field is not searched', async () => {
+    const made = makeSession({ services: { messages: [{ id: 1, text: 'Ann', note: 'secret' }] } }, ['messages'])
+    const service = made.setup.servicesOf(made.server.id)[0]!
+    const view = made.session.views[0]!
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+    view.setSearch('secret')
+    expect(view.rows?.map(record => record.id)).toEqual(['1'])
+
+    made.setup.updateService(service.id, { fields: [{ name: 'note', show: false, type: 'string', typePicked: false }] })
+    expect(view.rows).toEqual([])
+})
+
+test('a first page is not searched: the search waits for the view to be loaded whole', async () => {
+    const made = makeSession(
+        {
+            services: {
+                messages: [
+                    { id: 1, text: 'Ann' },
+                    { id: 2, text: 'Bob' },
+                ],
+            },
+        },
+        ['messages'],
+    )
+
+    made.setup.updateService(made.setup.servicesOf(made.server.id)[0]!.id, { load: 'paged', search: 'ann' })
+    await settled()
+
+    const view = made.session.views[0]!
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+    expect(view.search).toBe('ann')
+    expect(view.isSearching).toBe(false)
+    expect(view.rows?.map(record => record.id)).toEqual(['1', '2'])
+})
+
 test('a view not loaded whole counts no changes', async () => {
     const made = makeSession({ services: { messages: [{ id: 1 }] } }, ['messages'])
 

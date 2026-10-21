@@ -4,14 +4,16 @@
 // field of an empty service is guessed again from the first record by event that does not fit the guess. The view
 // holds the selection: an ID, kept whatever happens to the record, until the ID field is guessed again. It counts the
 // records that change while it is loaded whole, and marks a change made while it is not shown, until it is. It holds
-// the sort, which the setup keeps, and shows its records in that order.
+// the sort and the live search, which the setup keeps, and shows its records in that order, only those found when it
+// is loaded whole.
 import type { RecordSource } from 'live-system/core'
 import { computed, shallowRef, type ShallowRef } from 'vue'
-import { fieldTypeOf } from './columns.ts'
+import { columnsOf, fieldTypeOf } from './columns.ts'
 import { envelopeConversion, rawConversion } from './envelope.ts'
 import { guessIdField, probe, type ProbeResult } from './probe.ts'
 import type { RecordEnvelope, SessionConnection, SessionPhase } from './session.ts'
 import type { FieldSetup, ServiceSetup, ViewSort } from './setup.ts'
+import { searchRecords, searchWords, SearchTexts } from './search.ts'
 import { sortRecords } from './sort.ts'
 import { WholeLoader, type RecordLoader } from './whole-loader.ts'
 
@@ -38,6 +40,8 @@ export interface ViewOptions {
     fields?: () => readonly FieldSetup[]
     /** Keeps a sort the view is given, in the setup. Default: it is not kept. */
     saveSort?: (sort: ViewSort) => void
+    /** Keeps a search the view is given, in the setup. Default: it is not kept. */
+    saveSearch?: (search: string) => void
 }
 
 /**
@@ -81,6 +85,7 @@ export class ServiceView {
     readonly #isReadOnly: () => boolean
     readonly #fields: () => readonly FieldSetup[]
     readonly #saveSort: (sort: ViewSort) => void
+    readonly #saveSearch: (search: string) => void
     // The setup's ID field, if the user named one
     readonly #setIdField: string | undefined
     readonly #load: ServiceSetup['load']
@@ -94,9 +99,13 @@ export class ServiceView {
     readonly #changeCount = shallowRef(0)
     readonly #hasUnseenChanges = shallowRef(false)
     readonly #sort: ShallowRef<ViewSort>
+    readonly #search: ShallowRef<string>
     // When each record of the loader last changed, by `#changeCount`: read with it, as it is not reactive itself
     #changes = new Map<string, number>()
-    readonly #rows = computed(() => this.#sorted())
+    readonly #sortedRows = computed(() => this.#sorted())
+    readonly #rows = computed(() => this.#searched())
+    // The records' texts for the search, while the columns stay the same: `key` names them
+    #searchTexts: { key: string; texts: SearchTexts } | undefined
     #isShown = false
     // A loader whose first load is under way
     #loading: RecordLoader | undefined
@@ -114,7 +123,9 @@ export class ServiceView {
         this.#isReadOnly = options.isReadOnly ?? (() => false)
         this.#fields = options.fields ?? (() => service.fields)
         this.#saveSort = options.saveSort ?? (() => {})
+        this.#saveSearch = options.saveSearch ?? (() => {})
         this.#sort = shallowRef<ViewSort>(service.sort ?? { by: 'last-changed' })
+        this.#search = shallowRef(service.search ?? '')
         this.#setIdField = service.idField
         this.#load = service.load
         this.#idField.value = service.idField
@@ -145,7 +156,10 @@ export class ServiceView {
         return this.#loader.value?.rows ?? this.#records.value
     }
 
-    /** Reactive. The records, in the order of the sort. `null` before there are any. */
+    /**
+     * Reactive. The records, in the order of the sort; when loaded whole, only those the search finds. `null` before
+     * there are any.
+     */
     get rows(): readonly RecordEnvelope[] | null {
         return this.#rows.value
     }
@@ -159,6 +173,23 @@ export class ServiceView {
     setSort(sort: ViewSort): void {
         this.#sort.value = sort
         this.#saveSort(sort)
+    }
+
+    /** Reactive. The live search, as typed: the setup's, unless `setSearch()` says otherwise. */
+    get search(): string {
+        return this.#search.value
+    }
+
+    /** Searches the records, when loaded whole, and keeps the search in the setup. */
+    setSearch(search: string): void {
+        if (search === this.#search.value) return
+        this.#search.value = search
+        this.#saveSearch(search)
+    }
+
+    /** Reactive. Whether `rows` are only those the search finds: it has a word, and the view is loaded whole. */
+    get isSearching(): boolean {
+        return this.isWhole && searchWords(this.#search.value).length > 0
     }
 
     /** Reactive. Whether the view holds every record, kept current by the events. */
@@ -332,6 +363,25 @@ export class ServiceView {
             typeOf: field => fieldTypeOf(records, field, this.#fields()),
             changes: this.#changes,
         })
+    }
+
+    // The sorted records, only those the search finds when loaded whole: a first page is not searched
+    #searched(): readonly RecordEnvelope[] | null {
+        const sorted = this.#sortedRows.value
+
+        if (!sorted || !this.isSearching) return sorted
+
+        return searchRecords(sorted, this.#search.value, this.#textsFor(sorted))
+    }
+
+    // The texts of the records, by the columns the table shows of them, kept while those are the same
+    #textsFor(records: readonly RecordEnvelope[]): SearchTexts {
+        const columns = columnsOf(records, this.#idField.value, this.#fields())
+        const key = JSON.stringify(columns.map(column => [column.name, column.type.name]))
+
+        if (this.#searchTexts?.key !== key) this.#searchTexts = { key, texts: new SearchTexts(columns) }
+
+        return this.#searchTexts.texts
     }
 
     // A record of `loader` changed

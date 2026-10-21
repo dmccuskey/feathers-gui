@@ -53,6 +53,8 @@ export interface ServiceSetup {
     pins: string[]
     /** How its records are sorted. Unset: by last changed. */
     sort?: ViewSort
+    /** The live search, as typed. Unset: none. */
+    search?: string
 }
 
 /**

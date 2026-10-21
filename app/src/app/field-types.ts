@@ -1,5 +1,5 @@
 // The field types: each an object that the table, the fields dialog and the new-record template ask, so adding a type
-// is adding an object to the list. For now a type shows a value and compares two; how it guesses and defaults comes
+// is adding an object to the list. For now a type shows a value, gives the text a search finds it by, and compares two; how it guesses and defaults comes
 // with the step that needs it. A value is shown as text, never as markup: the record's content is the server's.
 import type { FieldType } from './setup.ts'
 
@@ -21,6 +21,8 @@ export interface FieldTypeDefinition {
     show(value: unknown): Shown | undefined
     /** `value` as a tooltip shows it, more of it than a cell: as `show()` when unset. Only given a value of this type. */
     showFull?(value: unknown): string
+    /** The text a search finds `value` by: what a cell would show with room for all of it. As `show()` when unset. */
+    search?(value: unknown): string
     /** Below zero when `a` sorts before `b`, above when after, zero when neither. Only given values of this type. */
     compare(a: unknown, b: unknown): number
 }
@@ -60,6 +62,7 @@ const string: FieldTypeDefinition = {
         return { text: cut(value.slice(0, SHOWN_LENGTH * 2).replace(/\r?\n/g, '⏎')) }
     },
     showFull: value => cutFull((value as string).replace(/\r\n/g, '\n')),
+    search: value => value as string,
     compare: (a, b) => collator.compare(a as string, b as string),
 }
 
@@ -112,6 +115,7 @@ const object: FieldTypeDefinition = {
     show: value =>
         typeof value === 'object' && value !== null && !Array.isArray(value) ? { text: summary(value) } : undefined,
     showFull: value => cutFull(JSON.stringify(value, null, 2)),
+    search: value => valuesOf(value).join('\n'),
     compare: (a, b) => collator.compare(summary(a as object), summary(b as object)),
 }
 
@@ -120,6 +124,7 @@ const array: FieldTypeDefinition = {
     label: 'Array',
     show: value => (Array.isArray(value) ? { text: summary(value) } : undefined),
     showFull: value => cutFull(JSON.stringify(value, null, 2)),
+    search: value => valuesOf(value).join('\n'),
     compare: (a, b) => collator.compare(summary(a as object), summary(b as object)),
 }
 
@@ -145,6 +150,19 @@ function summary(value: object): string {
 
     const [open, close] = isArray ? ['[', ']'] : ['{', '}']
     return parts.length === 0 ? `${open}${close}` : cut(`${open} ${parts.join(', ')} ${close}`)
+}
+
+/** Every value inside an object or an array, to the end, as written; not its keys, nor a null. */
+function valuesOf(value: unknown, values: string[] = []): string[] {
+    if (Array.isArray(value)) {
+        for (const item of value) valuesOf(item, values)
+    } else if (typeof value === 'object' && value !== null) {
+        for (const item of Object.values(value)) valuesOf(item, values)
+    } else if (value !== null && value !== undefined && value !== '') {
+        values.push(String(value))
+    }
+
+    return values
 }
 
 /** A value inside an object or an array: a nested one only as its brackets. */
@@ -187,6 +205,18 @@ export function showFullValue(value: unknown, type: FieldTypeDefinition): string
 
     const own = type.show(value) ? type : BY_VALUE.find(other => other.show(value))
     return own?.showFull?.(value) ?? shown.text
+}
+
+/**
+ * The text a search finds a field's value by: what its cell shows, as if it had room for all of it. A string whole,
+ * an object's or an array's every value, a date as shown; null, missing and empty as the words the cell shows.
+ */
+export function searchValue(value: unknown, type: FieldTypeDefinition): string {
+    const shown = showValue(value, type)
+    if (shown.tone === 'none') return shown.text
+
+    const own = type.show(value) ? type : BY_VALUE.find(other => other.show(value))
+    return own?.search?.(value) ?? shown.text
 }
 
 // Where a value sorts, whichever the direction: one of the field's type, then one that is not, then null, then missing

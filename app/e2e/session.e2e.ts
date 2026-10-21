@@ -273,3 +273,31 @@ test('a click on a header sorts by its column, and Last changed puts a record ch
     expect(answer.ok).toBe(true)
     await records(page).first().filter({ hasText: 'Changed just now' }).waitFor()
 }, 30_000)
+
+test('a search shows the records that have its words, says how many, and Escape clears it', async () => {
+    const page = await openApp(await newContext(storedSetup(['messages', 'notes']), 'messages'))
+    const search = page.getByRole('searchbox', { name: 'Search the records' })
+    const line = page.locator('.service-area-line')
+
+    await loggedIn(page)
+    await records(page).first().waitFor()
+
+    const answer = await fetch(`${SERVER_URL}/messages/11`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'A zebra crossing' }),
+    })
+
+    expect(answer.ok).toBe(true)
+    await search.fill('ZEBRA cross')
+    await line.filter({ hasText: '1 of 25 records · live' }).waitFor()
+    expect(await records(page).count()).toBe(1)
+    await records(page).first().filter({ hasText: 'A zebra crossing' }).waitFor()
+
+    await search.fill('zebra giraffe')
+    await page.getByText('No records have “zebra giraffe”.').waitFor()
+
+    await search.press('Escape')
+    await line.filter({ hasText: '25 records · live' }).waitFor()
+    expect(await search.inputValue()).toBe('')
+}, 30_000)
