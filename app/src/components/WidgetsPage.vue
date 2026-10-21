@@ -14,6 +14,9 @@ import {
     type TableColumn,
     useTheming,
 } from '../widgets/index.ts'
+import { fieldType, showValue, type FieldTypeDefinition } from '../app/field-types.ts'
+import type { FieldType } from '../app/setup.ts'
+import RecordCell from './RecordCell.vue'
 
 const theming = useTheming()
 
@@ -79,6 +82,53 @@ const READING_COLUMNS: TableColumn<Reading>[] = [
 ]
 const selectedReading = ref<PropertyKey>()
 const activated = ref<Reading>()
+
+// A value of each kind under each type: null and missing, a value not of its field's type, and one too long.
+type Sample = Record<string, unknown>
+
+const SAMPLE_FIELDS: [string, FieldType][] = [
+    ['_id', 'string'],
+    ['name', 'string'],
+    ['count', 'number'],
+    ['done', 'boolean'],
+    ['at', 'date'],
+    ['meta', 'object'],
+    ['tags', 'array'],
+]
+const SAMPLES: Sample[] = [
+    {
+        _id: 'a1',
+        name: 'Ann',
+        count: 7,
+        done: true,
+        at: '2026-10-01T12:34:56.789Z',
+        meta: { color: 'red', size: 3, parts: [1, 2] },
+        tags: ['one', 'two'],
+    },
+    { _id: 'a2', name: '', count: 0, done: false, at: Date.UTC(2026, 9, 2), meta: {}, tags: [] },
+    { _id: 'a3', name: null, count: null, done: null, at: null, meta: null, tags: null },
+    { _id: 'a4' },
+    { _id: 'a5', name: 42, count: '42', done: 'yes', at: 'next Tuesday', meta: [1, 2], tags: { a: 1 } },
+    {
+        _id: 'a6',
+        name: `A first line\nand a second, ${'and on '.repeat(60)}`,
+        count: 1234567.891,
+        done: true,
+        at: '2026-10-20',
+        meta: { note: 'a note long enough to be cut short inside the summary of its object', deep: { deeper: true } },
+        tags: Array.from({ length: 500 }, (_, index) => index),
+    },
+]
+const SAMPLE_TYPES: Record<string, FieldTypeDefinition> = Object.fromEntries(
+    SAMPLE_FIELDS.map(([name, type]) => [name, fieldType(type)]),
+)
+const SAMPLE_COLUMNS: TableColumn<Sample>[] = SAMPLE_FIELDS.map(([name]) => ({
+    key: name,
+    label: name,
+    text: row => showValue(row[name], SAMPLE_TYPES[name]!).text,
+    width: name === 'at' ? '11rem' : '6rem',
+    align: SAMPLE_TYPES[name]!.alignEnd ? 'end' : 'start',
+}))
 
 const RECORDS = [
     { id: 1, text: 'The first message', read: true, state: '' },
@@ -161,6 +211,17 @@ const RECORDS = [
             </div>
             <p class="plain">Selected: {{ selectedReading ?? 'none' }}. Activated: {{ activated?.id ?? 'none' }}.</p>
             <UiTable :columns="READING_COLUMNS" :rows="[]" :row-key="row => row.id" label="No readings" class="empty" />
+        </section>
+
+        <section class="card">
+            <h3>Values by their field's type</h3>
+            <div class="samples-box">
+                <UiTable :columns="SAMPLE_COLUMNS" :rows="SAMPLES" :row-key="row => String(row._id)" label="Values">
+                    <template #cell="{ row, column }">
+                        <RecordCell :value="row[column.key]" :type="SAMPLE_TYPES[column.key]!" />
+                    </template>
+                </UiTable>
+            </div>
         </section>
 
         <section class="card">
@@ -309,6 +370,10 @@ h3 {
 
 .table-box {
     height: 20rem;
+}
+
+.samples-box {
+    height: 13rem;
 }
 
 .empty {
