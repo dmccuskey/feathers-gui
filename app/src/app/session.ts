@@ -5,7 +5,7 @@ import { StateMachine } from '@dmccuskey/micro-fsm'
 import { shallowRef, watch } from 'vue'
 import type { Secrets } from './secrets.ts'
 import { ServiceView } from './service-view.ts'
-import type { LoginSetup, ServerSetup, ServiceSetup, Setup, ViewSort } from './setup.ts'
+import type { LoginSetup, ServerSetup, ServiceSetup, Setup } from './setup.ts'
 
 export interface SessionParts {
     setup: Setup
@@ -332,7 +332,8 @@ export class Session {
             const made = new ServiceView(service, this.#connection, {
                 isReadOnly: () => this.#setup.server(this.serverId)?.readOnly ?? false,
                 fields: () => this.#setup.service(service.id)?.fields ?? [],
-                saveSort: sort => this.#saveSort(service.id, sort),
+                saveSort: sort => this.#save(service.id, { sort }),
+                saveSearch: search => this.#save(service.id, { search }),
             })
 
             made.follow(this.#machine.state)
@@ -347,10 +348,11 @@ export class Session {
         }
     }
 
-    // A view's sort, kept in the setup. A setup that cannot be written (a newer one) leaves it with the view alone
-    #saveSort(serviceId: string, sort: ViewSort): void {
+    // A view's sort or search, kept in the setup. A setup that cannot be written (a newer one) leaves it with the view
+    // alone
+    #save(serviceId: string, changes: Pick<ServiceSetup, 'sort' | 'search'>): void {
         try {
-            this.#setup.updateService(serviceId, { sort })
+            this.#setup.updateService(serviceId, changes)
         } catch {
             // The service area says why the setup cannot be written
         }

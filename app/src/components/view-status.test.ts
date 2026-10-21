@@ -10,8 +10,10 @@ function view(state: Partial<ViewState>): ViewState {
     return {
         status: { phase: 'ready' },
         records: null,
+        rows: null,
         total: undefined,
         isWhole: false,
+        isSearching: false,
         hasUnseenChanges: false,
         ...state,
     }
@@ -27,6 +29,17 @@ test('a view loaded whole counts its records, and says it is live', () => {
     expect(viewLine(view({ records: records(25), isWhole: true }), 'ready')).toBe('25 records · live')
     expect(viewLine(view({ records: records(1), isWhole: true }), 'ready')).toBe('1 record · live')
     expect(viewLine(view({ records: [], isWhole: true }), 'ready')).toBe('0 records · live')
+})
+
+test('a view searched says how many records it found, of how many', () => {
+    const all = records(25)
+
+    expect(viewLine(view({ records: all, rows: all.slice(0, 12), isWhole: true, isSearching: true }), 'ready')).toBe(
+        '12 of 25 records · live',
+    )
+    expect(viewLine(view({ records: all, rows: [], isWhole: true, isSearching: true }), 'ready')).toBe(
+        '0 of 25 records · live',
+    )
 })
 
 test('a first page says how many more there are, or may be, and that it is read when shown', () => {

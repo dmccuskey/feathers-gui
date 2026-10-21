@@ -3,7 +3,10 @@ import type { ServiceView } from '../app/service-view.ts'
 import type { SessionPhase } from '../app/session.ts'
 
 /** What the line and the dot read of a view. */
-export type ViewState = Pick<ServiceView, 'status' | 'records' | 'total' | 'isWhole' | 'hasUnseenChanges'>
+export type ViewState = Pick<
+    ServiceView,
+    'status' | 'records' | 'rows' | 'total' | 'isWhole' | 'isSearching' | 'hasUnseenChanges'
+>
 
 export interface ViewDot {
     /** `none`: nothing to mark, the view not read yet or not loaded whole; `live`: whole and kept current. */
@@ -17,7 +20,7 @@ export interface ViewDot {
 const count = new Intl.NumberFormat('en')
 
 /**
- * The line over the records: how many are shown, of how many, and whether they are kept current. `undefined` while
+ * The line over the records: how many are shown, of how many (those the search found, of all), and whether they are kept current. `undefined` while
  * there are no records to put it over. `session`: the session's phase, which says why records are stale.
  */
 export function viewLine(view: ViewState, session: SessionPhase | undefined): string | undefined {
@@ -35,6 +38,11 @@ export function viewLine(view: ViewState, session: SessionPhase | undefined): st
                 ? 'Connection lost: the records last read'
                 : 'Not connected: the records last read'
         case 'ready':
+            if (view.isSearching) {
+                const found = (view.rows ?? records).length
+
+                return `${count.format(found)} of ${count.format(shown)} ${shown === 1 ? 'record' : 'records'} · live`
+            }
             if (view.isWhole) return `${count.format(shown)} ${shown === 1 ? 'record' : 'records'} · live`
             if (view.total === undefined) return `First ${count.format(shown)}, there may be more · read when shown`
             if (view.total > shown)

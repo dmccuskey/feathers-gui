@@ -1,12 +1,11 @@
 <script setup lang="ts">
 // The area of the current service. Until there is one, it says what is missing and offers the way to it. Of the
 // service it shows its view's records in the table, under a line of how many and whether they are live, and, for a
-// view loaded whole, the way back to sorting by last changed; a view not loaded whole is read again each time the
-// service is chosen. The records stay, dimmed, while the connection is being
-// brought back.
+// view loaded whole, the live search and the way back to sorting by last changed; a view not loaded whole is read
+// again each time the service is chosen. The records stay, dimmed, while the connection is being brought back.
 import { computed, onUnmounted, watch } from 'vue'
 import { useApp } from '../app/app.ts'
-import { UiButton } from '../widgets/index.ts'
+import { UiButton, UiInput } from '../widgets/index.ts'
 import RecordsViewer from './RecordsViewer.vue'
 import ServiceDot from './ServiceDot.vue'
 import { viewLine } from './view-status.ts'
@@ -25,9 +24,18 @@ const service = computed(() => {
 const status = computed(() => app.session?.status)
 const view = computed(() => (service.value ? app.session?.view(service.value.id) : undefined))
 const records = computed(() => view.value?.records ?? null)
+const rows = computed(() => view.value?.rows ?? records.value ?? [])
 const lastChanged = computed(() => view.value?.sort.by === 'last-changed')
 const failure = computed(() => view.value?.status.error?.message ?? null)
 const line = computed(() => (view.value ? viewLine(view.value, status.value?.phase) : undefined))
+
+// Escape empties the search, and leaves it to the dialog or whatever else is under it when it is empty already
+function clearSearch(event: KeyboardEvent): void {
+    if (!view.value?.search) return
+    event.preventDefault()
+    event.stopPropagation()
+    view.value.setSearch('')
+}
 
 // A view newly shown is told so, and reads again: the one shown at the start, of a service chosen, or of a new session
 watch(
@@ -88,27 +96,36 @@ onUnmounted(() => view.value?.shown(false))
                         <ServiceDot v-if="view?.isWhole" :view="view" />
                         {{ line }}
                     </p>
-                    <UiButton
-                        v-if="view?.isWhole"
-                        class="service-area-last-changed"
-                        :class="{ 'service-area-on': lastChanged }"
-                        variant="quiet"
-                        :aria-pressed="lastChanged"
-                        title="Sort by the changes seen, the latest first"
-                        @click="view.setSort({ by: 'last-changed' })"
-                    >
-                        Last changed
-                    </UiButton>
+                    <div v-if="view?.isWhole" class="service-area-tools">
+                        <UiInput
+                            class="service-area-search"
+                            type="search"
+                            placeholder="Search"
+                            aria-label="Search the records"
+                            spellcheck="false"
+                            autocomplete="off"
+                            :model-value="view.search"
+                            @update:model-value="view.setSearch($event)"
+                            @keydown.esc="clearSearch"
+                        />
+                        <UiButton
+                            class="service-area-last-changed"
+                            :class="{ 'service-area-on': lastChanged }"
+                            variant="quiet"
+                            :aria-pressed="lastChanged"
+                            title="Sort by the changes seen, the latest first"
+                            @click="view.setSort({ by: 'last-changed' })"
+                        >
+                            Last changed
+                        </UiButton>
+                    </div>
                 </div>
                 <p v-if="records.length === 0" class="service-area-status">No records.</p>
+                <p v-else-if="rows.length === 0 && view?.isSearching" class="service-area-status">
+                    No records have “{{ view.search.trim() }}”.
+                </p>
                 <div v-else class="service-area-records" :class="{ 'service-area-stale': status?.phase !== 'ready' }">
-                    <RecordsViewer
-                        v-if="view"
-                        :view="view"
-                        :records="records"
-                        :rows="view.rows ?? records"
-                        :fields="service.fields"
-                    />
+                    <RecordsViewer v-if="view" :view="view" :records="records" :rows="rows" :fields="service.fields" />
                 </div>
             </template>
         </template>
@@ -175,6 +192,19 @@ onUnmounted(() => view.value?.shown(false))
     gap: 0.5em;
     margin: 0;
     color: var(--ui-muted);
+    font-size: 0.86em;
+}
+
+.service-area-tools {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space);
+}
+
+.service-area-search {
+    width: 16em;
+    min-height: auto;
+    padding-block: 0.2em;
     font-size: 0.86em;
 }
 
