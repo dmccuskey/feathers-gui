@@ -141,3 +141,9 @@ test('a value not of the type comes after those that are, by what it is, then nu
     expect(sorted(values, 'number')).toEqual([1, 3, 'one', 'two', true, null, undefined])
     expect(sorted(values, 'number', true)).toEqual([3, 1, true, 'two', 'one', null, undefined])
 })
+
+test('a new record’s value is one of its type, and a new one each time', () => {
+    for (const type of FIELD_TYPES) expect(type.show(type.initial())).toBeDefined()
+    expect(FIELD_TYPES.map(type => type.initial())).toMatchObject(['', 0, false, expect.any(String), {}, []])
+    expect(fieldType('object').initial()).not.toBe(fieldType('object').initial())
+})

@@ -1,6 +1,6 @@
 // The field types: each an object that the table, the fields dialog and the new-record template ask, so adding a type
-// is adding an object to the list. For now a type shows a value, gives the text a search finds it by, and compares two; how it guesses and defaults comes
-// with the step that needs it. A value is shown as text, never as markup: the record's content is the server's.
+// is adding an object to the list. For now a type shows a value, gives the text a search finds it by, compares two, and
+// gives a new record's value; how it guesses comes with the step that needs it. A value is shown as text, never as markup: the record's content is the server's.
 import type { FieldType } from './setup.ts'
 
 /**
@@ -25,6 +25,8 @@ export interface FieldTypeDefinition {
     search?(value: unknown): string
     /** Below zero when `a` sorts before `b`, above when after, zero when neither. Only given values of this type. */
     compare(a: unknown, b: unknown): number
+    /** The value a new record starts with. A new one each call, so an object or an array is not shared. */
+    initial(): unknown
 }
 
 /** A cell's text is cut short at this: past it, a value is not seen in a column anyway. */
@@ -64,6 +66,7 @@ const string: FieldTypeDefinition = {
     showFull: value => cutFull((value as string).replace(/\r\n/g, '\n')),
     search: value => value as string,
     compare: (a, b) => collator.compare(a as string, b as string),
+    initial: () => '',
 }
 
 const number: FieldTypeDefinition = {
@@ -72,6 +75,7 @@ const number: FieldTypeDefinition = {
     alignEnd: true,
     show: value => (typeof value === 'number' ? { text: String(value) } : undefined),
     compare: (a, b) => order(a as number, b as number),
+    initial: () => 0,
 }
 
 const boolean: FieldTypeDefinition = {
@@ -80,6 +84,7 @@ const boolean: FieldTypeDefinition = {
     show: value => (typeof value === 'boolean' ? { text: String(value) } : undefined),
     // false first
     compare: (a, b) => Number(a) - Number(b),
+    initial: () => false,
 }
 
 /**
@@ -99,6 +104,8 @@ const date: FieldTypeDefinition = {
     },
     // By the time, whether ISO or milliseconds
     compare: (a, b) => order(new Date(a as string).getTime(), new Date(b as string).getTime()),
+    // Now, as an ISO string: what JSON carries a date as
+    initial: () => new Date().toISOString(),
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/
@@ -117,6 +124,7 @@ const object: FieldTypeDefinition = {
     showFull: value => cutFull(JSON.stringify(value, null, 2)),
     search: value => valuesOf(value).join('\n'),
     compare: (a, b) => collator.compare(summary(a as object), summary(b as object)),
+    initial: () => ({}),
 }
 
 const array: FieldTypeDefinition = {
@@ -126,6 +134,7 @@ const array: FieldTypeDefinition = {
     showFull: value => cutFull(JSON.stringify(value, null, 2)),
     search: value => valuesOf(value).join('\n'),
     compare: (a, b) => collator.compare(summary(a as object), summary(b as object)),
+    initial: () => [],
 }
 
 /**

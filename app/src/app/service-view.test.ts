@@ -785,6 +785,51 @@ test('a write is refused while the session is not ready, or before the ID field 
     expect(made.connection.writes).toEqual([])
 })
 
+test('writeRefusal says why a write would be refused, as it changes', async () => {
+    const made = makeSession({ services: { messages: [{ id: 1 }], things: [{ name: 'no id' }] } }, [
+        'messages',
+        'things',
+    ])
+    const [messages, things] = made.session.views as [ServiceView, ServiceView]
+    const refusal = computed(() => messages.writeRefusal)
+
+    expect(refusal.value).toBe('not-ready')
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+
+    expect(refusal.value).toBeUndefined()
+    expect(things.writeRefusal).toBe('not-ready')
+
+    made.setup.updateServer(made.server.id, { readOnly: true })
+    expect(refusal.value).toBe('read-only')
+    made.setup.updateServer(made.server.id, { readOnly: false })
+    expect(refusal.value).toBeUndefined()
+
+    made.session.destroy()
+    expect(refusal.value).toBe('not-ready')
+})
+
+test('a first page is read again after a write, as no event changes it', async () => {
+    const services: Record<string, unknown> = { messages: [{ id: 1 }] }
+    const made = makeSession({ services, onWrite: write => ({ id: 2, ...write.data }) }, ['messages'])
+
+    made.setup.updateService(made.setup.servicesOf(made.server.id)[0]!.id, { load: 'paged' })
+    await settled()
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+
+    const view = made.session.views[0]!
+
+    services.messages = [{ id: 1 }, { id: 2 }]
+    await view.create({})
+    await settled()
+
+    expect(idsOf(made, 'messages')).toEqual(['1', '2'])
+})
+
 test("the server's refusal is handed on with its name, code, data and errors", async () => {
     const ajv = [{ instancePath: '/text', keyword: 'type', message: 'must be string', params: {} }]
     const refusal = (data: unknown, errors?: unknown) =>

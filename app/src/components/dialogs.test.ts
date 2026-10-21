@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test'
-import { mount } from '@vue/test-utils'
-import type { ServerDialogInput, ServiceDialogInput } from '../app/app.ts'
+import { flushPromises, mount } from '@vue/test-utils'
+import type { RecordDialogInput, ServerDialogInput, ServiceDialogInput } from '../app/app.ts'
+import { WriteError } from '../app/service-view.ts'
 import type { ServiceSetup } from '../app/setup.ts'
+import RecordDialog from './RecordDialog.vue'
 import ServerDialog from './ServerDialog.vue'
 import ServiceDialog from './ServiceDialog.vue'
 
@@ -186,4 +188,58 @@ test("the ID field's placeholder says what the session guessed, or that nothing 
         "Guessed as '_id'",
         'Neither id nor _id: name it',
     ])
+})
+
+function mountRecord(create: RecordDialogInput['create']) {
+    return mount(RecordDialog, { props: { input: { path: 'tasks', record: { title: '', done: false }, create } } })
+}
+
+test('a new record starts from its template, and text that is no JSON object is said and not sent', async () => {
+    const created: unknown[] = []
+    const wrapper = mountRecord(async raw => void created.push(raw))
+    const create = () => wrapper.findAll('button').find(button => button.text() === 'Create')!
+
+    expect(JSON.parse((wrapper.find('textarea').element as HTMLTextAreaElement).value)).toEqual({
+        title: '',
+        done: false,
+    })
+
+    await wrapper.find('textarea').setValue('[1, 2]')
+    expect(wrapper.find('.ui-field-error').text()).toBe('A record is a JSON object, in braces.')
+    expect(create().attributes('disabled')).toBeDefined()
+    await submit(wrapper)
+    expect(created).toEqual([])
+
+    await wrapper.find('textarea').setValue('{ "title": "Shop" }')
+    expect(wrapper.find('.ui-field-error').exists()).toBe(false)
+    await submit(wrapper)
+    await flushPromises()
+
+    expect(created).toEqual([{ title: 'Shop' }])
+    expect(wrapper.emitted('answer')).toEqual([[null]])
+})
+
+test('a record the server refuses keeps the dialog open, with the reasons field by field', async () => {
+    const wrapper = mountRecord(async () => {
+        throw new WriteError(
+            'validation failed',
+            'server',
+            Object.assign(new Error('validation failed'), {
+                data: [{ instancePath: '/title', message: 'must NOT have fewer than 1 characters' }],
+            }),
+        )
+    })
+
+    await submit(wrapper)
+    await flushPromises()
+
+    expect(wrapper.find('[role="alert"]').text()).toContain('validation failed')
+    expect(wrapper.findAll('[role="alert"] li').map(item => item.text())).toEqual([
+        'title must NOT have fewer than 1 characters',
+    ])
+    expect(wrapper.emitted('answer')).toBeUndefined()
+    expect(JSON.parse((wrapper.find('textarea').element as HTMLTextAreaElement).value)).toEqual({
+        title: '',
+        done: false,
+    })
 })
