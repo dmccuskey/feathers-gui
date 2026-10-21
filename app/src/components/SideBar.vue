@@ -1,10 +1,12 @@
 <script setup lang="ts">
-// The side bar: the server this window works with, the state of the session with it, and its services.
+// The side bar: the server this window works with, the state of the session with it, and its services, each with
+// the dot of its view.
 import { computed } from 'vue'
 import { useApp } from '../app/app.ts'
 import type { ServerSetup } from '../app/setup.ts'
 import { UiButton, UiSelect } from '../widgets/index.ts'
 import AppIcon from './AppIcon.vue'
+import ServiceDot from './ServiceDot.vue'
 import SessionStatus from './SessionStatus.vue'
 
 const app = useApp()
@@ -100,7 +102,8 @@ function chooseService(id: string): void {
                         :aria-current="service.id === serviceId || undefined"
                         @click="chooseService(service.id)"
                     >
-                        {{ service.path }}
+                        <ServiceDot :view="app.session?.view(service.id)" />
+                        <span class="side-bar-path-text">{{ service.path }}</span>
                     </button>
                     <span class="side-bar-row-tools">
                         <UiButton
@@ -200,6 +203,9 @@ function chooseService(id: string): void {
 }
 
 .side-bar-path {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--ui-space) * 0.75);
     flex: 1;
     min-width: 0;
     min-height: var(--ui-control);
@@ -212,10 +218,14 @@ function chooseService(id: string): void {
     font-family: var(--ui-mono);
     font-size: 0.92em;
     text-align: left;
+    cursor: pointer;
+}
+
+.side-bar-path-text {
+    min-width: 0;
     text-overflow: ellipsis;
     white-space: nowrap;
     overflow: hidden;
-    cursor: pointer;
 }
 
 .side-bar-current .side-bar-path {

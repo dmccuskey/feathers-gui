@@ -1,10 +1,13 @@
 <script setup lang="ts">
 // The area of the current service. Until there is one, it says what is missing and offers the way to it. Of the
-// service it shows its view's records as they are, read again each time the service is chosen. The records stay,
-// dimmed, while the connection is being brought back.
-import { computed, watch } from 'vue'
+// service it shows its view's records as they are, under a line of how many and whether they are live; a view not
+// loaded whole is read again each time the service is chosen. The records stay, dimmed, while the connection is being
+// brought back.
+import { computed, onUnmounted, watch } from 'vue'
 import { useApp } from '../app/app.ts'
 import { UiButton } from '../widgets/index.ts'
+import ServiceDot from './ServiceDot.vue'
+import { viewLine } from './view-status.ts'
 
 const app = useApp()
 const setup = app.setup
@@ -21,9 +24,19 @@ const status = computed(() => app.session?.status)
 const view = computed(() => (service.value ? app.session?.view(service.value.id) : undefined))
 const records = computed(() => view.value?.records ?? null)
 const failure = computed(() => view.value?.status.error?.message ?? null)
+const line = computed(() => (view.value ? viewLine(view.value, status.value?.phase) : undefined))
 
-// A view newly shown reads again: the one shown at the start, of a service chosen, or of a new session
-watch(view, shown => void shown?.read(), { immediate: true })
+// A view newly shown is told so, and reads again: the one shown at the start, of a service chosen, or of a new session
+watch(
+    view,
+    (shown, before) => {
+        before?.shown(false)
+        shown?.shown(true)
+        void shown?.read()
+    },
+    { immediate: true },
+)
+onUnmounted(() => view.value?.shown(false))
 </script>
 
 <template>
@@ -67,10 +80,16 @@ watch(view, shown => void shown?.read(), { immediate: true })
             </div>
             <p v-else-if="!records && status?.phase === 'lost'" class="service-area-status">Connection lost.</p>
             <p v-else-if="!records" class="service-area-status">Loading…</p>
-            <p v-else-if="records.length === 0" class="service-area-status">No records.</p>
-            <ol v-else class="service-area-records" :class="{ 'service-area-stale': status?.phase !== 'ready' }">
-                <li v-for="record in records" :key="record.id">{{ JSON.stringify(record.raw) }}</li>
-            </ol>
+            <template v-else>
+                <p v-if="line" class="service-area-line" role="status">
+                    <ServiceDot v-if="view?.isWhole" :view="view" />
+                    {{ line }}
+                </p>
+                <p v-if="records.length === 0" class="service-area-status">No records.</p>
+                <ol v-else class="service-area-records" :class="{ 'service-area-stale': status?.phase !== 'ready' }">
+                    <li v-for="record in records" :key="record.id">{{ JSON.stringify(record.raw) }}</li>
+                </ol>
+            </template>
         </template>
     </section>
 </template>
@@ -119,6 +138,15 @@ watch(view, shown => void shown?.read(), { immediate: true })
 
 .service-area-status {
     color: var(--ui-muted);
+}
+
+.service-area-line {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    margin: var(--ui-space) 0 0;
+    color: var(--ui-muted);
+    font-size: 0.86em;
 }
 
 .service-area-records {
