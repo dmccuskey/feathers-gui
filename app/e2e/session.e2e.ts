@@ -46,7 +46,7 @@ function status(page: Page) {
 }
 
 function records(page: Page) {
-    return page.locator('.service-area-records li')
+    return page.locator('.service-area-records .ui-table-shown [role="row"]')
 }
 
 /** Waits for the status line to say `text`. */
@@ -198,8 +198,8 @@ test('a service loaded whole shows every record, and a change made by another cl
     const page = await openApp(await newContext(storedSetup(['messages', 'notes']), 'messages'))
 
     await loggedIn(page)
-    await records(page).nth(24).waitFor()
-    expect(await records(page).count()).toBe(25)
+    // The table draws only the rows in view: it counts its header among its rows
+    await page.locator('.service-area-records [role="grid"][aria-rowcount="26"]').waitFor()
 
     const answer = await fetch(`${SERVER_URL}/messages/1`, {
         method: 'PATCH',
@@ -231,3 +231,20 @@ test("a token that runs out is replaced by the session's own login, and the reco
     expect(await page.getByRole('dialog').count()).toBe(0)
     expect(await page.locator('.service-area-notice').count()).toBe(0)
 }, 40_000)
+
+test('a record is selected by a click and by the keyboard, and stays selected when the service is chosen again', async () => {
+    const page = await openApp(await newContext(storedSetup(['messages', 'notes']), 'messages'))
+    const selected = page.locator('.service-area-records [role="row"][aria-selected="true"]')
+
+    await loggedIn(page)
+    await records(page).nth(2).click()
+    await selected.filter({ hasText: 'Message number 3' }).waitFor()
+
+    await page.keyboard.press('ArrowDown')
+    await selected.filter({ hasText: 'Message number 4' }).waitFor()
+
+    await page.locator('.side-bar-path', { hasText: 'notes' }).click()
+    await page.locator('.service-area-path', { hasText: 'notes' }).waitFor()
+    await page.locator('.side-bar-path', { hasText: 'messages' }).click()
+    await selected.filter({ hasText: 'Message number 4' }).waitFor()
+}, 30_000)

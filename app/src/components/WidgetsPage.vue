@@ -129,13 +129,6 @@ const SAMPLE_COLUMNS: TableColumn<Sample>[] = SAMPLE_FIELDS.map(([name]) => ({
     width: name === 'at' ? '11rem' : '6rem',
     align: SAMPLE_TYPES[name]!.alignEnd ? 'end' : 'start',
 }))
-
-const RECORDS = [
-    { id: 1, text: 'The first message', read: true, state: '' },
-    { id: 2, text: 'A message that is selected', read: false, state: 'selected' },
-    { id: 3, text: 'A message that has just changed', read: true, state: 'changed' },
-    { id: 4, text: 'The last message', read: false, state: '' },
-]
 </script>
 
 <template>
@@ -225,31 +218,6 @@ const RECORDS = [
         </section>
 
         <section class="card">
-            <h3>Records, as they might look</h3>
-            <p class="states">
-                <span class="state success">connected</span>
-                <span class="state warning">connecting</span>
-                <span class="state danger">no connection</span>
-            </p>
-            <table class="records">
-                <thead>
-                    <tr>
-                        <th>id</th>
-                        <th>text</th>
-                        <th>read</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-for="record in RECORDS" :key="record.id" :class="record.state">
-                        <td>{{ record.id }}</td>
-                        <td>{{ record.text }}</td>
-                        <td>{{ record.read }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </section>
-
-        <section class="card">
             <h3>The theme's roles</h3>
             <ul class="roles">
                 <li v-for="[role, color] in roles" :key="role">
@@ -336,36 +304,8 @@ h3 {
     align-items: start;
 }
 
-.plain,
-.states {
+.plain {
     margin: 0;
-}
-
-.states {
-    display: flex;
-    gap: 1.25rem;
-}
-
-.state::before {
-    content: '';
-    display: inline-block;
-    width: 0.55em;
-    height: 0.55em;
-    margin-right: 0.45em;
-    border-radius: 50%;
-    background: currentColor;
-}
-
-.success {
-    color: var(--ui-success);
-}
-
-.warning {
-    color: var(--ui-warning);
-}
-
-.danger {
-    color: var(--ui-danger);
 }
 
 .table-box {
@@ -378,40 +318,6 @@ h3 {
 
 .empty {
     height: auto;
-}
-
-.records {
-    width: 100%;
-    border-collapse: collapse;
-    font-family: var(--ui-mono);
-    font-size: 0.86em;
-}
-
-.records th,
-.records td {
-    padding: 0.4em 0.7em;
-    border-bottom: 1px solid var(--ui-border);
-    text-align: left;
-}
-
-.records th {
-    background: var(--ui-sunken);
-    color: var(--ui-muted);
-    font-weight: 600;
-}
-
-.records tbody tr:hover {
-    background: var(--ui-sunken);
-}
-
-.records tr.selected {
-    background: var(--ui-accent-soft);
-    box-shadow: inset 2px 0 0 var(--ui-accent);
-}
-
-.records tr.changed td:nth-child(2) {
-    color: var(--ui-accent);
-    text-shadow: var(--ui-glow);
 }
 
 .roles {

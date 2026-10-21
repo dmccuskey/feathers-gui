@@ -41,6 +41,13 @@ function mountApp(connection: FakeConnectionOptions | FakeConnection = {}, befor
     return { app, theming, wrapper }
 }
 
+/** The cells of each row in the records table, as text. */
+function rowsOf(wrapper: ReturnType<typeof mountApp>['wrapper']): string[][] {
+    return wrapper
+        .findAll('.service-area-records .ui-table-shown [role="row"]')
+        .map(row => row.findAll('[role="gridcell"]').map(cell => cell.text()))
+}
+
 function addServer(app: GuiApp, name: string): ServerSetup {
     return app.setup.addServer({ name, url: `http://${name}.test`, readOnly: false })
 }
@@ -108,7 +115,7 @@ test('the services of the current server are listed by path, and choosing one sh
     expect(wrapper.find('.service-area-path').text()).toBe('things')
 })
 
-test('the records of the current service are listed as the server has them', async () => {
+test('the records of the current service are in the table, a column per field', async () => {
     const { app, wrapper } = mountApp({ services: { things: [{ _id: 'a', name: 'first' }] } })
     const server = addServer(app, 'local')
 
@@ -116,7 +123,11 @@ test('the records of the current service are listed as the server has them', asy
     app.setup.setCurrentService(server.id, addService(app, server, 'things').id)
     await flushPromises()
 
-    expect(wrapper.findAll('.service-area-records li').map(item => item.text())).toEqual(['{"_id":"a","name":"first"}'])
+    expect(wrapper.findAll('.service-area-records [role="columnheader"]').map(cell => cell.text())).toEqual([
+        '_id',
+        'name',
+    ])
+    expect(rowsOf(wrapper)).toEqual([['a', 'first']])
 })
 
 test('the service current at the start is read', async () => {
@@ -128,7 +139,7 @@ test('the service current at the start is read', async () => {
     })
 
     await flushPromises()
-    expect(wrapper.findAll('.service-area-records li').map(item => item.text())).toEqual(['{"_id":"a"}'])
+    expect(rowsOf(wrapper)).toEqual([['a']])
 })
 
 test('a service chosen again is read again, when it is not loaded whole', async () => {
@@ -137,19 +148,18 @@ test('a service chosen again is read again, when it is not loaded whole', async 
     const server = addServer(app, 'local')
     const things = addService(app, server, 'things', 'paged')
     const messages = addService(app, server, 'messages')
-    const listed = () => wrapper.findAll('.service-area-records li').map(item => item.text())
 
     app.activateServer(server.id)
     app.setup.setCurrentService(server.id, things.id)
     await flushPromises()
-    expect(listed()).toEqual(['{"_id":"a"}'])
+    expect(rowsOf(wrapper)).toEqual([['a']])
 
     services.things = [{ _id: 'b' }]
     app.setup.setCurrentService(server.id, messages.id)
     await flushPromises()
     app.setup.setCurrentService(server.id, things.id)
     await flushPromises()
-    expect(listed()).toEqual(['{"_id":"b"}'])
+    expect(rowsOf(wrapper)).toEqual([['b']])
 })
 
 test('the records are under a line of how many, and whether they are live', async () => {
