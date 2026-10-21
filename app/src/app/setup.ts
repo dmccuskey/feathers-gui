@@ -51,7 +51,15 @@ export interface ServiceSetup {
     fields: FieldSetup[]
     /** Record IDs. */
     pins: string[]
+    /** How its records are sorted. Unset: by last changed. */
+    sort?: ViewSort
 }
+
+/**
+ * How a service's records are sorted. `last-changed`: by the change events of this session, newest first, then the
+ * records not changed in ID order. `field`: by a field's values, as its type compares them.
+ */
+export type ViewSort = { by: 'last-changed' } | { by: 'field'; field: string; descending: boolean }
 
 /**
  * Whether the stored setup can be used. `newer`: it was written by a newer version of the app, and this window

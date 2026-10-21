@@ -3,16 +3,21 @@ import { mount } from '@vue/test-utils'
 import { nextTick, reactive } from 'vue'
 import type { ServiceView } from '../app/service-view.ts'
 import type { RecordEnvelope } from '../app/session.ts'
+import type { ViewSort } from '../app/setup.ts'
 import RecordsViewer from './RecordsViewer.vue'
 
-// What the viewer uses of a view: its path, its ID field and its selection
+// What the viewer uses of a view: its path, its ID field, its selection and its sort
 function fakeView(idField = 'id') {
     const view = reactive({
         path: 'messages',
         idField,
         selectedId: null as string | null,
+        sort: { by: 'last-changed' } as ViewSort,
         select(id: string | null) {
             view.selectedId = id
+        },
+        setSort(sort: ViewSort) {
+            view.sort = sort
         },
     })
 
@@ -72,4 +77,37 @@ test('the row selected is the view’s selection, both ways', async () => {
     view.select(null)
     await nextTick()
     expect(rows(wrapper).map(row => row.attributes('aria-selected'))).toEqual(['false', 'false'])
+})
+
+test('a click on a header sorts by its column, and again the other way; another column starts ascending', async () => {
+    const view = fakeView()
+    const wrapper = mountViewer(view, envelopes({ id: 1, text: 'a' }))
+    const sortBy = (index: number) => wrapper.findAll('.ui-table-sort')[index]!.trigger('click')
+
+    await sortBy(1)
+    expect(view.sort).toEqual({ by: 'field', field: 'text', descending: false })
+    await sortBy(1)
+    expect(view.sort).toEqual({ by: 'field', field: 'text', descending: true })
+    await sortBy(0)
+    expect(view.sort).toEqual({ by: 'field', field: 'id', descending: false })
+})
+
+test('the column sorted by is marked, and the rows are shown as given, the columns as the records are held', async () => {
+    const view = fakeView()
+    const records = envelopes({ id: 1, a: 'x' }, { id: 2, b: 'y' })
+    const wrapper = mount(RecordsViewer, {
+        props: { view: view as unknown as ServiceView, records, rows: [records[1]!, records[0]!] },
+    })
+
+    expect(headers(wrapper)).toEqual(['id', 'a', 'b'])
+    expect(rows(wrapper).map(row => row.find('[role="gridcell"]').text())).toEqual(['2', '1'])
+    expect(wrapper.findAll('[aria-sort]')).toHaveLength(0)
+
+    view.setSort({ by: 'field', field: 'a', descending: true })
+    await nextTick()
+    expect(wrapper.findAll('[role="columnheader"]').map(cell => cell.attributes('aria-sort'))).toEqual([
+        undefined,
+        'descending',
+        undefined,
+    ])
 })

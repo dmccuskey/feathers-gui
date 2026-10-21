@@ -1,6 +1,6 @@
 // The field types: each an object that the table, the fields dialog and the new-record template ask, so adding a type
-// is adding an object to the list. For now a type only shows a value; how it sorts, guesses and defaults comes with
-// the step that needs it. A value is shown as text, never as markup: the record's content is the server's.
+// is adding an object to the list. For now a type shows a value and compares two; how it guesses and defaults comes
+// with the step that needs it. A value is shown as text, never as markup: the record's content is the server's.
 import type { FieldType } from './setup.ts'
 
 /**
@@ -21,6 +21,8 @@ export interface FieldTypeDefinition {
     show(value: unknown): Shown | undefined
     /** `value` as a tooltip shows it, more of it than a cell: as `show()` when unset. Only given a value of this type. */
     showFull?(value: unknown): string
+    /** Below zero when `a` sorts before `b`, above when after, zero when neither. Only given values of this type. */
+    compare(a: unknown, b: unknown): number
 }
 
 /** A cell's text is cut short at this: past it, a value is not seen in a column anyway. */
@@ -29,6 +31,13 @@ export const SHOWN_LENGTH = 200
 /** A tooltip's text is cut short at this many characters, or at this many lines. */
 export const FULL_LENGTH = 2000
 export const FULL_LINES = 40
+
+// Strings are compared as a reader would: "item 2" before "item 10", and "a" with "A"
+const collator = new Intl.Collator(undefined, { numeric: true })
+
+function order(a: number | string, b: number | string): number {
+    return a < b ? -1 : a > b ? 1 : 0
+}
 
 function cut(text: string): string {
     return text.length > SHOWN_LENGTH ? `${text.slice(0, SHOWN_LENGTH - 1)}…` : text
@@ -51,6 +60,7 @@ const string: FieldTypeDefinition = {
         return { text: cut(value.slice(0, SHOWN_LENGTH * 2).replace(/\r?\n/g, '⏎')) }
     },
     showFull: value => cutFull((value as string).replace(/\r\n/g, '\n')),
+    compare: (a, b) => collator.compare(a as string, b as string),
 }
 
 const number: FieldTypeDefinition = {
@@ -58,12 +68,15 @@ const number: FieldTypeDefinition = {
     label: 'Number',
     alignEnd: true,
     show: value => (typeof value === 'number' ? { text: String(value) } : undefined),
+    compare: (a, b) => order(a as number, b as number),
 }
 
 const boolean: FieldTypeDefinition = {
     name: 'boolean',
     label: 'Boolean',
     show: value => (typeof value === 'boolean' ? { text: String(value) } : undefined),
+    // false first
+    compare: (a, b) => Number(a) - Number(b),
 }
 
 /**
@@ -81,6 +94,8 @@ const date: FieldTypeDefinition = {
         if (Number.isNaN(time.getTime())) return undefined
         return { text: typeof value === 'string' && value.length === 10 ? value : localTime(time) }
     },
+    // By the time, whether ISO or milliseconds
+    compare: (a, b) => order(new Date(a as string).getTime(), new Date(b as string).getTime()),
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}([T ]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$/
@@ -97,6 +112,7 @@ const object: FieldTypeDefinition = {
     show: value =>
         typeof value === 'object' && value !== null && !Array.isArray(value) ? { text: summary(value) } : undefined,
     showFull: value => cutFull(JSON.stringify(value, null, 2)),
+    compare: (a, b) => collator.compare(summary(a as object), summary(b as object)),
 }
 
 const array: FieldTypeDefinition = {
@@ -104,6 +120,7 @@ const array: FieldTypeDefinition = {
     label: 'Array',
     show: value => (Array.isArray(value) ? { text: summary(value) } : undefined),
     showFull: value => cutFull(JSON.stringify(value, null, 2)),
+    compare: (a, b) => collator.compare(summary(a as object), summary(b as object)),
 }
 
 /**
@@ -170,4 +187,36 @@ export function showFullValue(value: unknown, type: FieldTypeDefinition): string
 
     const own = type.show(value) ? type : BY_VALUE.find(other => other.show(value))
     return own?.showFull?.(value) ?? shown.text
+}
+
+// Where a value sorts, whichever the direction: one of the field's type, then one that is not, then null, then missing
+function rank(value: unknown, type: FieldTypeDefinition): number {
+    if (value === undefined) return 3
+    if (value === null) return 2
+    return type.show(value) ? 0 : 1
+}
+
+/**
+ * Two values of a field, as a sort by it orders them: by the field's type, with a value not of it after those that
+ * are, by what it is, then null, then missing. `descending` reverses the values, and leaves those without one last.
+ */
+export function compareValues(a: unknown, b: unknown, type: FieldTypeDefinition, descending = false): number {
+    const rankA = rank(a, type)
+    const rankB = rank(b, type)
+
+    if (rankA !== rankB) return rankA - rankB
+    if (rankA >= 2) return 0
+
+    let compared: number
+
+    if (rankA === 0) {
+        compared = type.compare(a, b)
+    } else {
+        const ownA = BY_VALUE.findIndex(other => other.show(a))
+        const ownB = BY_VALUE.findIndex(other => other.show(b))
+
+        compared = ownA !== ownB ? ownA - ownB : (BY_VALUE[ownA]?.compare(a, b) ?? 0)
+    }
+
+    return descending ? -compared : compared
 }

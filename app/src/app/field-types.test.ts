@@ -4,6 +4,7 @@ import {
     FULL_LENGTH,
     FULL_LINES,
     SHOWN_LENGTH,
+    compareValues,
     fieldType,
     showFullValue,
     showValue,
@@ -115,4 +116,28 @@ test('a tooltip is cut short by its length, or by its lines', () => {
     ).split('\n')
     expect(many).toHaveLength(FULL_LINES + 1)
     expect(many.at(-1)).toBe('…')
+})
+
+// Values sorted by a field of `type`
+const sorted = (values: unknown[], type: Parameters<typeof fieldType>[0], descending = false) =>
+    [...values].sort((a, b) => compareValues(a, b, fieldType(type), descending))
+
+test('each type compares its own values: numbers in strings by value, dates by time, false first', () => {
+    expect(sorted(['item 10', 'b', 'item 2', 'A'], 'string')).toEqual(['A', 'b', 'item 2', 'item 10'])
+    expect(sorted([10, -1, 2.5], 'number')).toEqual([-1, 2.5, 10])
+    expect(sorted([true, false], 'boolean')).toEqual([false, true])
+    expect(sorted(['2026-10-20T10:00:00+02:00', 1_760_950_000_000, '2026-10-20T09:00:00Z'], 'date')).toEqual([
+        1_760_950_000_000,
+        '2026-10-20T10:00:00+02:00',
+        '2026-10-20T09:00:00Z',
+    ])
+    expect(sorted([{ b: 1 }, { a: 2 }], 'object')).toEqual([{ a: 2 }, { b: 1 }])
+    expect(sorted([[2], [1, 3]], 'array')).toEqual([[1, 3], [2]])
+})
+
+test('a value not of the type comes after those that are, by what it is, then null, then missing, either way', () => {
+    const values = [undefined, 'two', null, 3, true, 1, 'one']
+
+    expect(sorted(values, 'number')).toEqual([1, 3, 'one', 'two', true, null, undefined])
+    expect(sorted(values, 'number', true)).toEqual([3, 1, true, 'two', 'one', null, undefined])
 })

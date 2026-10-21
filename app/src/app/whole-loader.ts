@@ -19,9 +19,9 @@ export interface RecordLoader {
     stop(): Promise<void>
 }
 
-// No more than the five members of a `RecordStore`, on the app's own Vue. `onChange` is told of each record set or
-// removed after the load: by an event, or by a sync that found it changed.
-function recordStore(onChange: () => void): RecordStore<RecordEnvelope> {
+// No more than the five members of a `RecordStore`, on the app's own Vue. `onChange` is told the ID of each record set
+// or removed after the load: by an event, or by a sync that found it changed.
+function recordStore(onChange: (id: string) => void): RecordStore<RecordEnvelope> {
     const records = shallowRef(shallowReactive({} as Record<string, RecordEnvelope>))
 
     return {
@@ -36,11 +36,11 @@ function recordStore(onChange: () => void): RecordStore<RecordEnvelope> {
         },
         set(record) {
             records.value[record.id] = record
-            onChange()
+            onChange(record.id)
         },
         remove(id) {
             delete records.value[id]
-            onChange()
+            onChange(id)
         },
         get: id => records.value[id],
     }
@@ -60,9 +60,9 @@ export class WholeLoader implements RecordLoader {
     /**
      * Over a record source of envelopes. The source's own word of a reconnect is not taken: the view calls `sync()`
      * once the session is ready again, logged in, as a service with a login sends no events before. `onChange` is
-     * told of each record that changes after the load, by an event or a sync.
+     * told the ID of each record that changes after the load, by an event or a sync.
      */
-    constructor(source: RecordSource<RecordEnvelope>, onChange: () => void = () => {}) {
+    constructor(source: RecordSource<RecordEnvelope>, onChange: (id: string) => void = () => {}) {
         this.#store = recordStore(onChange)
 
         const resync = this.#resync
