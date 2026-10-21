@@ -122,7 +122,7 @@ test('Log Out drops the records and waits, without the dialog, until Log In', as
     await records(page).first().waitFor()
 }, 30_000)
 
-test('"Remember on this computer" keeps the password in the setup, and a new window logs in with it', async () => {
+test('"Remember on this computer" keeps the password: a new window logs in with it, and Log In after Log Out', async () => {
     const context = await newContext()
     const page = await openApp(context)
 
@@ -139,6 +139,23 @@ test('"Remember on this computer" keeps the password in the setup, and a new win
 
     const next = await openApp(context)
 
+    await statusSays(next, `Connected as ${USER.email}`)
+    expect(await next.getByRole('dialog').count()).toBe(0)
+
+    // Log Out keeps it, and lasts through a reload of the window; Log In then uses it, without the dialog
+    const logOut = next.locator('.session-status').getByRole('button', { name: 'Log Out' })
+
+    expect(await logOut.getAttribute('title')).toContain('remembered on this computer is kept')
+    await logOut.click()
+    await statusSays(next, 'Not logged in.')
+    expect((await setupOf(next)).servers[0]?.login).toMatchObject({ remember: true, password: USER.password })
+
+    await next.reload()
+    await statusSays(next, 'Not logged in.')
+    await Bun.sleep(500)
+    expect(await next.getByRole('dialog').count()).toBe(0)
+
+    await next.locator('.session-status').getByRole('button', { name: 'Log In' }).click()
     await statusSays(next, `Connected as ${USER.email}`)
     expect(await next.getByRole('dialog').count()).toBe(0)
 }, 30_000)

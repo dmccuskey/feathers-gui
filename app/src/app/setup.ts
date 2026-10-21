@@ -1,4 +1,5 @@
-// The user's setup: the servers and services set up, and what is current in this window. It saves itself in the
+// The user's setup: the servers and services set up, and what is current in this window, with the servers logged
+// out of in it. It saves itself in the
 // browser, and follows the other windows of the app (ADR 007).
 import { shallowRef } from 'vue'
 
@@ -111,6 +112,8 @@ interface Current {
     serverId: string | null
     /** The current service of each server, by server ID. */
     serviceIds: Record<string, string>
+    /** The servers logged out of in this window: none logs in by itself until a login, a reload included. */
+    loggedOut?: string[]
 }
 
 type ReadResult = { status: 'ok'; stored: StoredSetup } | { status: Exclude<SetupStatus, 'ok'> }
@@ -193,6 +196,18 @@ export class Setup {
         }
 
         this.#setCurrent({ ...this.#current.value, serviceIds })
+    }
+
+    /** Whether the server was logged out of in this window, and not logged in to since. */
+    isLoggedOut(serverId: string): boolean {
+        return this.#current.value.loggedOut?.includes(serverId) ?? false
+    }
+
+    /** Marks the server logged out of in this window, or not. It lasts through a reload of the window. */
+    setLoggedOut(serverId: string, isLoggedOut: boolean): void {
+        const others = (this.#current.value.loggedOut ?? []).filter(id => id !== serverId)
+
+        this.#setCurrent({ ...this.#current.value, loggedOut: isLoggedOut ? [...others, serverId] : others })
     }
 
     // The writes. Each reads what is stored now and changes the one record in it, so that what another window
@@ -370,7 +385,8 @@ export class Setup {
             if (this.service(serviceId)?.serverId === ofServer) serviceIds[ofServer] = serviceId
         }
 
-        const current: Current = { serverId, serviceIds }
+        const loggedOut = (wanted.loggedOut ?? []).filter(id => this.server(id))
+        const current: Current = { serverId, serviceIds, ...(loggedOut.length > 0 ? { loggedOut } : {}) }
         const text = JSON.stringify(current)
 
         if (text !== JSON.stringify(this.#current.value)) this.#current.value = current
@@ -459,6 +475,8 @@ function isCurrent(value: unknown): value is Current {
         isObject(value) &&
         (value.serverId === null || typeof value.serverId === 'string') &&
         isObject(value.serviceIds) &&
-        Object.values(value.serviceIds).every(serviceId => typeof serviceId === 'string')
+        Object.values(value.serviceIds).every(serviceId => typeof serviceId === 'string') &&
+        (value.loggedOut === undefined ||
+            (Array.isArray(value.loggedOut) && value.loggedOut.every(id => typeof id === 'string')))
     )
 }

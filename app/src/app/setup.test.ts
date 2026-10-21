@@ -272,6 +272,25 @@ describe('what is current', () => {
         expect(JSON.parse(window.session.getItem(CURRENT_KEY) ?? '')).toEqual({ serverId: null, serviceIds: {} })
     })
 
+    test('a server logged out of stays so through a reload of the window, in it alone, until it is not', () => {
+        const browser = new FakeBrowser()
+        const window = browser.open()
+        const setup = new Setup(window)
+        const one = setup.addServer(SERVER)
+        const two = setup.addServer({ ...SERVER, name: 'Other' })
+
+        setup.setLoggedOut(one.id, true)
+        setup.setLoggedOut(two.id, true)
+        setup.setLoggedOut(two.id, false)
+
+        expect(new Setup(window).isLoggedOut(one.id)).toBe(true)
+        expect(new Setup(window).isLoggedOut(two.id)).toBe(false)
+        expect(new Setup(browser.open()).isLoggedOut(one.id)).toBe(false)
+
+        setup.removeServer(one.id)
+        expect(JSON.parse(window.session.getItem(CURRENT_KEY) ?? '').loggedOut).toBeUndefined()
+    })
+
     test('a new window does not start on a server that has been removed', () => {
         const browser = new FakeBrowser()
         const setup = new Setup(browser.open())

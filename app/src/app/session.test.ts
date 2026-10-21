@@ -541,3 +541,24 @@ test('a login waiting when the session is destroyed rejects', async () => {
     session.destroy()
     expect(login).rejects.toThrow('The session was closed')
 })
+
+test('after logout() a new session of the same window waits for login(), with a password remembered, until a login', async () => {
+    const { session, setup, secrets } = makeSession({ password: 'secret' }, { remember: true, password: 'secret' })
+    const server = setup.server(session.serverId)!
+
+    await session.open()
+    await session.logout()
+    session.destroy()
+
+    // A reload: the window's setup, read again
+    const connection = fakeConnection({ password: 'secret' })
+    const again = new Session(server, { setup, secrets, makeConnection: () => connection, loginWait: 20 })
+
+    await again.open()
+    await settled()
+    expect(again.status.phase).toBe('login-needed')
+    expect(connection.logins).toEqual([])
+
+    await again.login({ username: 'ada@example.com', password: 'secret' })
+    expect(setup.isLoggedOut(server.id)).toBe(false)
+})
