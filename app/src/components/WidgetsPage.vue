@@ -9,7 +9,9 @@ import {
     UiField,
     UiInput,
     UiSelect,
+    UiTable,
     themeRoles,
+    type TableColumn,
     useTheming,
 } from '../widgets/index.ts'
 
@@ -42,6 +44,41 @@ const TRANSPORTS = [
     { value: 'socketio', label: 'Socket.io' },
     { value: 'rest', label: 'REST' },
 ] as const
+
+// Rows enough to see that only those in view are drawn.
+interface Reading {
+    id: number
+    sensor: string
+    value: number
+    ok: boolean
+    at: string
+}
+
+const SENSORS = ['north', 'south', 'east', 'west', 'a sensor with a name too long for its column']
+const ROW_COUNTS = [
+    { value: 100, label: '100 rows' },
+    { value: 10_000, label: '10,000 rows' },
+    { value: 100_000, label: '100,000 rows' },
+]
+const rowCount = ref(10_000)
+const readings = computed<Reading[]>(() =>
+    Array.from({ length: rowCount.value }, (_, index) => ({
+        id: index + 1,
+        sensor: SENSORS[index % SENSORS.length]!,
+        value: Math.round(Math.sin(index) * 1000) / 10,
+        ok: index % 7 !== 0,
+        at: new Date(Date.UTC(2026, 9, 1) + index * 60_000).toISOString(),
+    })),
+)
+const READING_COLUMNS: TableColumn<Reading>[] = [
+    { key: 'id', label: 'id', text: row => String(row.id), width: '5rem', align: 'end' },
+    { key: 'sensor', label: 'sensor', text: row => row.sensor, width: '10rem' },
+    { key: 'value', label: 'value', text: row => String(row.value), width: '6rem', align: 'end' },
+    { key: 'ok', label: 'ok', text: row => String(row.ok), width: '4rem' },
+    { key: 'at', label: 'at', text: row => row.at, width: '14rem' },
+]
+const selectedReading = ref<PropertyKey>()
+const activated = ref<Reading>()
 
 const RECORDS = [
     { id: 1, text: 'The first message', read: true, state: '' },
@@ -103,6 +140,27 @@ const RECORDS = [
                 <UiButton @click="dialogOpen = true">Add a server…</UiButton>
                 <UiButton variant="danger" @click="removeOpen = true">Remove a server…</UiButton>
             </div>
+        </section>
+
+        <section class="card">
+            <h3>A table</h3>
+            <div class="row">
+                <UiField label="Rows" class="theme">
+                    <UiSelect v-model="rowCount" :options="ROW_COUNTS" />
+                </UiField>
+            </div>
+            <div class="table-box">
+                <UiTable
+                    v-model:selected="selectedReading"
+                    :columns="READING_COLUMNS"
+                    :rows="readings"
+                    :row-key="row => row.id"
+                    label="Readings"
+                    @activate="row => (activated = row)"
+                />
+            </div>
+            <p class="plain">Selected: {{ selectedReading ?? 'none' }}. Activated: {{ activated?.id ?? 'none' }}.</p>
+            <UiTable :columns="READING_COLUMNS" :rows="[]" :row-key="row => row.id" label="No readings" class="empty" />
         </section>
 
         <section class="card">
@@ -247,6 +305,14 @@ h3 {
 
 .danger {
     color: var(--ui-danger);
+}
+
+.table-box {
+    height: 20rem;
+}
+
+.empty {
+    height: auto;
 }
 
 .records {
