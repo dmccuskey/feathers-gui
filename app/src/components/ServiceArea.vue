@@ -111,6 +111,7 @@ onUnmounted(() => view.value?.shown(false))
                         <UiInput
                             v-if="view?.isWhole"
                             class="service-area-search"
+                            size="small"
                             type="search"
                             placeholder="Search"
                             aria-label="Search the records"
@@ -123,9 +124,9 @@ onUnmounted(() => view.value?.shown(false))
                         <UiButton
                             v-if="view?.isWhole"
                             class="service-area-tool"
-                            :class="{ 'service-area-on': lastChanged }"
                             variant="quiet"
-                            :aria-pressed="lastChanged"
+                            size="small"
+                            :pressed="lastChanged"
                             title="Sort by the changes seen, the latest first"
                             @click="view.setSort({ by: 'last-changed' })"
                         >
@@ -134,6 +135,7 @@ onUnmounted(() => view.value?.shown(false))
                         <UiButton
                             class="service-area-tool"
                             variant="quiet"
+                            size="small"
                             :disabled="refusal !== undefined"
                             :title="refusal ?? 'Create a record'"
                             @click="app.newRecord(service.id)"
@@ -143,6 +145,7 @@ onUnmounted(() => view.value?.shown(false))
                         <UiButton
                             class="service-area-tool"
                             variant="quiet"
+                            size="small"
                             :disabled="refusal !== undefined || removable === undefined"
                             :title="
                                 refusal ??
@@ -244,20 +247,6 @@ onUnmounted(() => view.value?.shown(false))
 
 .service-area-search {
     width: 16em;
-    min-height: auto;
-    padding-block: 0.2em;
-    font-size: 0.86em;
-}
-
-.service-area-tool {
-    min-height: auto;
-    padding-block: 0.2em;
-    color: var(--ui-muted);
-    font-size: 0.86em;
-}
-
-.service-area-tool.service-area-on {
-    color: var(--ui-accent);
 }
 
 .service-area-records {

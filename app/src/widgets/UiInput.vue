@@ -1,7 +1,10 @@
 <script setup lang="ts">
-// A line of text. What a native input takes (`type`, `placeholder`, `disabled`) is passed on to it.
+// A line of text. What a native input takes (`type`, `placeholder`, `disabled`) is passed on to it. `small` fits a
+// line of text, as a row of tools over a table does.
 import { inject } from 'vue'
 import { FIELD_KEY } from './field.ts'
+
+withDefaults(defineProps<{ size?: 'normal' | 'small' }>(), { size: 'normal' })
 
 const value = defineModel<string>({ default: '' })
 const field = inject(FIELD_KEY, null)
@@ -12,6 +15,7 @@ const field = inject(FIELD_KEY, null)
         :id="field?.id"
         v-model="value"
         class="ui-input"
+        :class="{ 'ui-input-small': size === 'small' }"
         :aria-describedby="field?.describedBy"
         :aria-invalid="field?.invalid || undefined"
     />
@@ -31,6 +35,12 @@ const field = inject(FIELD_KEY, null)
     transition:
         border-color 0.12s,
         box-shadow 0.12s;
+}
+
+.ui-input-small {
+    min-height: auto;
+    padding-block: 0.2em;
+    font-size: 0.86em;
 }
 
 .ui-input::placeholder {
