@@ -459,6 +459,52 @@ test('the selection follows its record by the events, and keeps its ID while the
     expect(text.value).toBe('C')
 })
 
+test('a change by event is counted, and marked unseen while the view is not shown, until it is', async () => {
+    const made = makeSession({ services: { messages: [{ id: 1 }], things: [{ id: 1 }] } }, ['messages', 'things'])
+    const [messages, things] = made.session.views as [ServiceView, ServiceView]
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+    messages.shown(true)
+    expect([messages.changeCount, things.changeCount]).toEqual([0, 0])
+
+    made.connection.emit('messages', 'created', { id: 2 })
+    made.connection.emit('things', 'patched', { id: 1, text: 'B' })
+    made.connection.emit('things', 'created', { id: 2 })
+    await settled()
+    expect([messages.changeCount, things.changeCount]).toEqual([1, 2])
+    expect([messages.hasUnseenChanges, things.hasUnseenChanges]).toEqual([false, true])
+
+    messages.shown(false)
+    things.shown(true)
+    expect([messages.hasUnseenChanges, things.hasUnseenChanges]).toEqual([false, false])
+
+    made.connection.emit('messages', 'removed', { id: 2 })
+    await settled()
+    expect(messages.hasUnseenChanges).toBe(true)
+
+    // Dropped with the records
+    made.session.destroy()
+    expect(messages.hasUnseenChanges).toBe(false)
+})
+
+test('a view not loaded whole counts no changes', async () => {
+    const made = makeSession({ services: { messages: [{ id: 1 }] } }, ['messages'])
+
+    made.setup.updateService(made.setup.servicesOf(made.server.id)[0]!.id, { load: 'paged' })
+    await settled()
+
+    const view = made.session.views[0]!
+
+    showAll(made.session)
+    await made.session.open()
+    await settled()
+    made.connection.emit('messages', 'created', { id: 2 })
+    await settled()
+    expect([view.changeCount, view.hasUnseenChanges]).toEqual([0, false])
+})
+
 test('the selection is kept while the records are stale', async () => {
     const made = makeSession({ manual: true, services: { messages: [{ id: 1 }] } }, ['messages'])
     const view = made.session.views[0]!

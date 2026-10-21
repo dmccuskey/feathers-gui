@@ -73,6 +73,32 @@ test('sync() brings what is held up to the source, after events were missed', as
     expect(loader.record('a')?.raw.name).toBe('A')
 })
 
+test('onChange is told of each record changed after the load, by an event or a sync, and not of the load', async () => {
+    const source = new MemoryRecordSource([envelope('a'), envelope('b')])
+    let changes = 0
+    const loader = new WholeLoader(source, () => changes++)
+
+    await loader.load()
+    expect(changes).toBe(0)
+
+    await source.create(envelope('c'))
+    await source.patch('a', { raw: { _id: 'a', name: 'A' } })
+    await source.remove('b')
+    expect(changes).toBe(3)
+
+    source.disconnect()
+    await source.remove('c')
+    source.reconnect()
+    loader.sync()
+    await settled()
+    expect(changes).toBe(4)
+
+    // A sync that finds nothing changed tells nothing
+    loader.sync()
+    await settled()
+    expect(changes).toBe(4)
+})
+
 test("the source's own reconnect does not sync: the view says when", async () => {
     const source = new MemoryRecordSource([envelope('a')])
     const loader = new WholeLoader(source)

@@ -2,7 +2,8 @@
 // read is the probe; a service small enough is then loaded whole, and kept current by the events from then on
 // (ADR 006). Any other shows the probe's first page, read again each time it is shown, until the paged loader. The ID
 // field of an empty service is guessed again from the first record by event that does not fit the guess. The view
-// holds the selection: an ID, kept whatever happens to the record, until the ID field is guessed again.
+// holds the selection: an ID, kept whatever happens to the record, until the ID field is guessed again. It counts the
+// records that change while it is loaded whole, and marks a change made while it is not shown, until it is.
 import type { RecordSource } from 'live-system/core'
 import { shallowRef } from 'vue'
 import { envelopeConversion, rawConversion } from './envelope.ts'
@@ -81,6 +82,9 @@ export class ServiceView {
     readonly #records = shallowRef<readonly RecordEnvelope[] | null>(null)
     readonly #loader = shallowRef<RecordLoader | undefined>(undefined)
     readonly #selectedId = shallowRef<string | null>(null)
+    readonly #changeCount = shallowRef(0)
+    readonly #hasUnseenChanges = shallowRef(false)
+    #isShown = false
     // A loader whose first load is under way
     #loading: RecordLoader | undefined
     #isSessionReady = false
@@ -150,6 +154,22 @@ export class ServiceView {
         return this.#loader.value ? this.#loader.value.record(id) : this.#records.value?.find(each => each.id === id)
     }
 
+    /** Reactive. How many records have changed, by an event or a sync, while the view was loaded whole. */
+    get changeCount(): number {
+        return this.#changeCount.value
+    }
+
+    /** Reactive. Whether a record changed while the view was not shown. Showing it clears it. */
+    get hasUnseenChanges(): boolean {
+        return this.#hasUnseenChanges.value
+    }
+
+    /** Told by the service area whether it shows the view. */
+    shown(isShown: boolean): void {
+        this.#isShown = isShown
+        if (isShown) this.#hasUnseenChanges.value = false
+    }
+
     /** Selects a record by its ID, or none with `null`. */
     select(id: string | null): void {
         this.#selectedId.value = id
@@ -184,6 +204,7 @@ export class ServiceView {
                         idField,
                         ...(guessesAgain ? { onEventError: () => this.#guessAgain(loader) } : {}),
                     }),
+                    () => this.#changed(loader),
                 )
 
                 this.#loading = loader
@@ -234,6 +255,7 @@ export class ServiceView {
             this.#records.value = null
             void this.#loader.value?.stop()
             this.#loader.value = undefined
+            this.#hasUnseenChanges.value = false
         }
         this.#status.value = { phase: this.records ? 'stale' : 'waiting' }
     }
@@ -261,6 +283,14 @@ export class ServiceView {
     destroy(): void {
         this.follow('closed')
         this.#destroyed = true
+    }
+
+    // A record of `loader` changed
+    #changed(loader: RecordLoader): void {
+        if (this.#loader.value !== loader) return
+
+        this.#changeCount.value++
+        if (!this.#isShown) this.#hasUnseenChanges.value = true
     }
 
     // The probe again, for a new guess of the ID field, in place of `loader`, the empty service's
