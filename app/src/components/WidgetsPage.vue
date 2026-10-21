@@ -40,6 +40,9 @@ const urlError = computed(() =>
     /^https?:\/\//.test(url.value) ? undefined : 'An address starts with http:// or https://',
 )
 const notes = ref('')
+const toolSearch = ref('')
+const sortPressed = ref(true)
+const pinsPressed = ref(false)
 const recordText = ref('{\n  "text": "Hello",\n}')
 const recordError = computed(() => readRecord(recordText.value).error)
 const transport = ref<'socketio' | 'rest'>('socketio')
@@ -158,6 +161,30 @@ const SAMPLE_COLUMNS: TableColumn<Sample>[] = SAMPLE_FIELDS.map(([name]) => ({
                 <UiButton disabled>Cancel</UiButton>
                 <UiButton variant="danger" disabled>Remove</UiButton>
                 <UiButton variant="quiet" disabled>Fields…</UiButton>
+            </div>
+        </section>
+
+        <section class="card">
+            <h3>A row of tools</h3>
+            <p class="plain">
+                Small, as over the records: a search, two toggles (one on, one off; a click turns either), and a tool
+                that cannot be used.
+            </p>
+            <div class="row tools">
+                <UiInput v-model="toolSearch" class="tool-search" size="small" type="search" placeholder="Search" />
+                <UiButton variant="quiet" size="small" :pressed="sortPressed" @click="sortPressed = !sortPressed">
+                    Last changed
+                </UiButton>
+                <UiButton variant="quiet" size="small" :pressed="pinsPressed" @click="pinsPressed = !pinsPressed">
+                    Pinned only
+                </UiButton>
+                <UiButton variant="quiet" size="small">New</UiButton>
+                <UiButton variant="quiet" size="small" disabled>Remove</UiButton>
+            </div>
+            <div class="row tools">
+                <UiButton size="small">Plain</UiButton>
+                <UiButton variant="primary" size="small">Primary</UiButton>
+                <UiButton variant="danger" size="small">Danger</UiButton>
             </div>
         </section>
 
@@ -306,6 +333,14 @@ h3 {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
+}
+
+.tools {
+    align-items: center;
+}
+
+.tool-search {
+    width: 14em;
 }
 
 .form {

@@ -1,18 +1,29 @@
 <script setup lang="ts">
 // A button. `primary` is the one a dialog or a form is for; `danger` is for what cannot be undone; `quiet` has no
-// frame, for a row of tools.
+// frame, for a row of tools. `small` fits a line of text, as a row of tools over a table does; a small quiet button is
+// muted. `pressed` makes it a toggle, in the accent while it is on.
 withDefaults(
     defineProps<{
         variant?: 'plain' | 'primary' | 'danger' | 'quiet'
+        size?: 'normal' | 'small'
+        /** Whether a toggle is on. Unset: the button is no toggle. */
+        pressed?: boolean
         /** `submit` in a dialog or a form makes it the button that Enter presses. */
         type?: 'button' | 'submit'
     }>(),
-    { variant: 'plain', type: 'button' },
+    { variant: 'plain', size: 'normal', pressed: undefined, type: 'button' },
 )
 </script>
 
 <template>
-    <button class="ui-button" :class="`ui-button-${variant}`" :type="type"><slot /></button>
+    <button
+        class="ui-button"
+        :class="[`ui-button-${variant}`, { 'ui-button-small': size === 'small', 'ui-button-pressed': pressed }]"
+        :type="type"
+        :aria-pressed="pressed"
+    >
+        <slot />
+    </button>
 </template>
 
 <style>
@@ -77,6 +88,20 @@ withDefaults(
 .ui-button-quiet:hover {
     border-color: transparent;
     background: var(--ui-sunken);
+}
+
+.ui-button-small {
+    min-height: auto;
+    padding-block: 0.2em;
+    font-size: 0.86em;
+}
+
+.ui-button-small.ui-button-quiet {
+    color: var(--ui-muted);
+}
+
+.ui-button.ui-button-pressed {
+    color: var(--ui-accent);
 }
 
 .ui-button:disabled {

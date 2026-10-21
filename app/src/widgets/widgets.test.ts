@@ -179,3 +179,18 @@ test('a text area shows its value, gives back what is typed, and takes its field
     await alone.setValue('three')
     expect(alone.emitted('update:modelValue')).toEqual([['three']])
 })
+
+test('a small button and a small input are marked so, and a toggle says whether it is pressed', () => {
+    const small = mount(UiButton, { props: { size: 'small', variant: 'quiet' }, slots: { default: 'New' } })
+    const on = mount(UiButton, { props: { pressed: true } })
+    const off = mount(UiButton, { props: { pressed: false } })
+
+    expect(small.classes()).toEqual(expect.arrayContaining(['ui-button-small', 'ui-button-quiet']))
+    expect(small.attributes('aria-pressed')).toBeUndefined()
+    expect(on.attributes('aria-pressed')).toBe('true')
+    expect(on.classes()).toContain('ui-button-pressed')
+    expect(off.attributes('aria-pressed')).toBe('false')
+    expect(off.classes()).not.toContain('ui-button-pressed')
+    expect(mount(UiInput, { props: { size: 'small' } }).classes()).toContain('ui-input-small')
+    expect(mount(UiInput).classes()).not.toContain('ui-input-small')
+})
