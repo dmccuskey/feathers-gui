@@ -343,3 +343,36 @@ test('a server with a login asks for the password, says why it was refused, and 
     expect(wrapper.find('.session-status').text()).toContain('Connected as ada@example.com')
     expect(wrapper.find('.service-area-status').text()).toBe('No records.')
 })
+
+test('New and Remove are over the records, Remove once one is selected, and neither on a read-only server', async () => {
+    const { app, wrapper } = mountApp({ services: { messages: [{ id: 1 }] } })
+    const server = addServer(app, 'local')
+    const service = addService(app, server, 'messages')
+    const button = (label: string) => wrapper.findAll('.service-area-tool').find(each => each.text() === label)!
+    const disabled = () => ['New', 'Remove'].map(label => button(label).attributes('disabled') !== undefined)
+
+    app.activateServer(server.id)
+    app.setup.setCurrentService(server.id, service.id)
+    await flushPromises()
+
+    expect(disabled()).toEqual([false, true])
+    expect(button('Remove').attributes('title')).toBe('Select a record to remove')
+
+    app.session?.view(service.id)?.select('1')
+    await nextTick()
+    expect(disabled()).toEqual([false, false])
+
+    await button('New').trigger('click')
+    expect(app.dialogs.open.map(dialog => dialog.kind)).toEqual(['record'])
+    app.dialogs.cancelAll()
+
+    await button('Remove').trigger('click')
+    await flushPromises()
+    expect(app.dialogs.open.map(dialog => dialog.kind)).toEqual(['ask'])
+    app.dialogs.cancelAll()
+
+    app.setup.updateServer(server.id, { readOnly: true })
+    await nextTick()
+    expect(disabled()).toEqual([true, true])
+    expect(button('New').attributes('title')).toBe('The server is set read-only')
+})

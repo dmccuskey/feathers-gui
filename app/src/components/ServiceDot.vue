@@ -13,10 +13,12 @@ const dot = computed(() => viewDot(props.view))
 // Counts the pulses: a new one makes the dot again, which starts its animation over
 const pulses = ref(0)
 
+// A change of the same view: the dot over the records is handed another view when another service is chosen, and its
+// count is not a change
 watch(
-    () => props.view?.changeCount ?? 0,
-    (changes, before) => {
-        if (changes > before) pulses.value++
+    () => [props.view, props.view?.changeCount ?? 0] as const,
+    ([view, changes], [viewBefore, before]) => {
+        if (view === viewBefore && changes > before) pulses.value++
     },
 )
 </script>

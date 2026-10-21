@@ -5,7 +5,7 @@
 // holds the selection: an ID, kept whatever happens to the record, until the ID field is guessed again. It counts the
 // records that change while it is loaded whole, and marks a change made while it is not shown, until it is. It holds
 // the sort and the live search, which the setup keeps, and shows its records in that order, only those found when it
-// is loaded whole.
+// is loaded whole. It writes to the service; a first page, which no event keeps current, is read again after a write.
 import type { RecordSource } from 'live-system/core'
 import { computed, shallowRef, type ShallowRef } from 'vue'
 import { columnsOf, fieldTypeOf } from './columns.ts'
@@ -109,7 +109,7 @@ export class ServiceView {
     #isShown = false
     // A loader whose first load is under way
     #loading: RecordLoader | undefined
-    #isSessionReady = false
+    readonly #isSessionReady = shallowRef(false)
     // It has been shown: it reads each time the session is ready
     #isWanted = false
     // Counts the reads started; one that is not the last is ignored when it ends
@@ -222,6 +222,17 @@ export class ServiceView {
         return this.#changeCount.value
     }
 
+    /**
+     * Reactive. Why a write would be refused before any call, as `WriteError` has it: `read-only`, the server is set
+     * so; `not-ready`, the session is not ready or the ID field is not known. `undefined` when it can be made.
+     */
+    get writeRefusal(): 'read-only' | 'not-ready' | undefined {
+        if (this.#isReadOnly()) return 'read-only'
+        if (this.#destroyed || !this.#isSessionReady.value || this.#idField.value === undefined) return 'not-ready'
+
+        return undefined
+    }
+
     /** Reactive. Whether a record changed while the view was not shown. Showing it clears it. */
     get hasUnseenChanges(): boolean {
         return this.#hasUnseenChanges.value
@@ -245,7 +256,7 @@ export class ServiceView {
      */
     async read(): Promise<void> {
         if (!this.#destroyed) this.#isWanted = true
-        if (!this.#isSessionReady || this.#destroyed || this.#status.value.phase === 'loading') return
+        if (!this.#isSessionReady.value || this.#destroyed || this.#status.value.phase === 'loading') return
         if (this.#loader.value) return
 
         const count = ++this.#readCount
@@ -299,8 +310,8 @@ export class ServiceView {
     follow(phase: SessionPhase): void {
         if (this.#destroyed) return
 
-        this.#isSessionReady = phase === 'ready'
-        if (this.#isSessionReady) {
+        this.#isSessionReady.value = phase === 'ready'
+        if (this.#isSessionReady.value) {
             if (this.#loader.value) {
                 this.#loader.value.sync()
                 this.#status.value = { phase: 'ready' }
@@ -324,7 +335,10 @@ export class ServiceView {
         this.#status.value = { phase: this.records ? 'stale' : 'waiting' }
     }
 
-    /** Creates a record. Resolves with the server's answer; what the view holds changes only by the event after it. */
+    /**
+     * Creates a record. Resolves with the server's answer; what the view holds changes only by the event after it,
+     * or, for a first page, by reading it again.
+     */
     create(raw: Record<string, unknown>): Promise<RecordEnvelope> {
         return this.#write(source => source.create({ raw }))
     }
@@ -415,20 +429,26 @@ export class ServiceView {
         if (this.#isReadOnly()) {
             throw new WriteError(`The server is read-only: nothing is written to "${this.path}"`, 'read-only')
         }
-        if (this.#destroyed || !this.#isSessionReady) {
+        if (this.#destroyed || !this.#isSessionReady.value) {
             throw new WriteError(`Not connected: nothing is written to "${this.path}"`, 'not-ready')
         }
         if (idField === undefined) {
             throw new WriteError(`The ID field of "${this.path}" is not known: nothing is written`, 'not-ready')
         }
 
+        let written: RecordEnvelope
+
         try {
-            return await call(
+            written = await call(
                 this.#connection.recordSource(this.path, { convert: envelopeConversion(idField), idField }),
             )
         } catch (error) {
             throw new WriteError(error instanceof Error ? error.message : String(error), 'server', error)
         }
+        // No event changes a first page
+        if (!this.#loader.value && this.#isWanted) void this.read()
+
+        return written
     }
 }
 

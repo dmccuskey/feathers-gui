@@ -301,3 +301,33 @@ test('a search shows the records that have its words, says how many, and Escape 
     await line.filter({ hasText: '25 records · live' }).waitFor()
     expect(await search.inputValue()).toBe('')
 }, 30_000)
+
+test('a new record is made from its template once the server takes it, and removed after asking', async () => {
+    const page = await openApp(await newContext(storedSetup(['tasks']), 'tasks'))
+    const line = page.locator('.service-area-line')
+    const dialog = page.getByRole('dialog', { name: 'New Record' })
+    const json = dialog.getByRole('textbox', { name: 'Record, as JSON' })
+
+    await loggedIn(page)
+    await line.filter({ hasText: '3 records · live' }).waitFor()
+
+    // The template has every field but the ID, and the schema of `tasks` takes none of the dates
+    await page.getByRole('button', { name: 'New', exact: true }).click()
+    expect(JSON.parse(await json.inputValue())).toMatchObject({ title: '', done: false, priority: 0 })
+    await dialog.getByRole('button', { name: 'Create' }).click()
+    await dialog.getByRole('alert').waitFor()
+    expect(await dialog.getByRole('alert').locator('li').count()).toBeGreaterThan(0)
+
+    await json.fill('{ "title": "  Buy milk ", "done": false, "priority": 2 }')
+    await json.press('ControlOrMeta+Enter')
+    await dialog.waitFor({ state: 'detached' })
+    await line.filter({ hasText: '4 records · live' }).waitFor()
+    await page.locator('.service-area-records [aria-selected="true"]', { hasText: 'Buy milk' }).waitFor()
+
+    await page.getByRole('grid').press('Delete')
+    const ask = page.getByRole('dialog', { name: 'Remove the record?' })
+
+    await ask.getByRole('button', { name: 'Remove' }).click()
+    await line.filter({ hasText: '3 records · live' }).waitFor()
+    expect(await records(page).filter({ hasText: 'Buy milk' }).count()).toBe(0)
+}, 30_000)

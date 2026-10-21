@@ -10,11 +10,13 @@ import {
     UiInput,
     UiSelect,
     UiTable,
+    UiTextArea,
     themeRoles,
     type TableColumn,
     useTheming,
 } from '../widgets/index.ts'
 import { fieldType, showValue, type FieldTypeDefinition } from '../app/field-types.ts'
+import { readRecord } from '../app/new-record.ts'
 import type { FieldType } from '../app/setup.ts'
 import RecordCell from './RecordCell.vue'
 
@@ -37,6 +39,9 @@ const url = ref('localhost:3041')
 const urlError = computed(() =>
     /^https?:\/\//.test(url.value) ? undefined : 'An address starts with http:// or https://',
 )
+const notes = ref('')
+const recordText = ref('{\n  "text": "Hello",\n}')
+const recordError = computed(() => readRecord(recordText.value).error)
 const transport = ref<'socketio' | 'rest'>('socketio')
 const readOnly = ref(false)
 const remember = ref(true)
@@ -170,6 +175,12 @@ const SAMPLE_COLUMNS: TableColumn<Sample>[] = SAMPLE_FIELDS.map(([name]) => ({
                 </UiField>
                 <UiField label="Disabled">
                     <UiInput model-value="Not to be changed" disabled />
+                </UiField>
+                <UiField label="Notes" hint="Lines of text">
+                    <UiTextArea v-model="notes" rows="3" />
+                </UiField>
+                <UiField label="A record" :error="recordError">
+                    <UiTextArea v-model="recordText" rows="4" mono spellcheck="false" />
                 </UiField>
                 <UiCheckbox v-model="readOnly">Read only</UiCheckbox>
                 <UiCheckbox v-model="remember">Remember the password</UiCheckbox>

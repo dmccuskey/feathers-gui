@@ -7,6 +7,7 @@ import AskDialog from './AskDialog.vue'
 import DialogHost from './DialogHost.vue'
 import InfoDialog from './InfoDialog.vue'
 import LoginDialog from './LoginDialog.vue'
+import RecordDialog from './RecordDialog.vue'
 import ServerDialog from './ServerDialog.vue'
 import ServersDialog from './ServersDialog.vue'
 import ServiceArea from './ServiceArea.vue'
@@ -24,6 +25,7 @@ const DIALOGS: Record<keyof AppDialogs, Component> = {
     server: ServerDialog,
     service: ServiceDialog,
     login: LoginDialog,
+    record: RecordDialog,
 }
 
 /** The page of the widgets is at this address, and nothing links to it. */

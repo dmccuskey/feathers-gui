@@ -2,10 +2,12 @@
 // active server, and needs no connection (ADR 004). It is made once by `createGuiApp()` and provided to the
 // components, which get it by `useApp()`.
 import { effectScope, inject, shallowRef, watch, type InjectionKey } from 'vue'
+import { columnsOf } from './columns.ts'
 import { Dialogs } from './dialogs.ts'
+import { recordTemplate } from './new-record.ts'
 import { Secrets, type SecretsOptions } from './secrets.ts'
 import { Session, type LoginCredentials, type SessionParts } from './session.ts'
-import type { ServiceView } from './service-view.ts'
+import { WriteError, type ServiceView } from './service-view.ts'
 import {
     Setup,
     SetupBlockedError,
@@ -24,6 +26,7 @@ export type AppDialogs = {
     server: { input: ServerDialogInput; answer: ServerDialogAnswer }
     service: { input: ServiceDialogInput; answer: ServiceDialogAnswer }
     login: { input: LoginDialogInput; answer: null }
+    record: { input: RecordDialogInput; answer: null }
 }
 
 /** A question with a button for each answer. The first button is where the focus starts. */
@@ -61,6 +64,15 @@ export interface ServiceDialogInput {
 
 /** `idField` is `undefined` when left blank: the ID field is guessed. */
 export type ServiceDialogAnswer = Pick<ServiceSetup, 'path' | 'load'> & { idField: string | undefined }
+
+export interface RecordDialogInput {
+    /** The service's path. */
+    path: string
+    /** The record to start from. */
+    record: Record<string, unknown>
+    /** Creates the record. Rejects with a `WriteError`; the dialog stays open for another try. */
+    create(raw: Record<string, unknown>): Promise<void>
+}
 
 export interface LoginDialogInput {
     /** The server to log in to, with its login. */
@@ -328,6 +340,65 @@ export class App {
         })
 
         if (answer === 'remove') await this.#write(() => this.setup.removeService(serviceId))
+    }
+
+    /**
+     * Asks for a new record of a service, from a template of its table's columns, and creates it; the dialog stays
+     * until the server takes it. The record made is selected.
+     */
+    async newRecord(serviceId: string): Promise<void> {
+        const view = this.session?.view(serviceId)
+
+        if (!view || view.writeRefusal) return
+
+        const fields = this.setup.service(serviceId)?.fields
+        const columns = columnsOf(view.records ?? [], view.idField, fields)
+
+        await this.dialogs.show('record', {
+            path: view.path,
+            record: recordTemplate(columns, view.idField),
+            create: async raw => view.select((await view.create(raw)).id),
+        })
+    }
+
+    /**
+     * Removes a record of a service from the server, once the user has agreed, and selects the row after it, or else
+     * the one before. Says so when the server refuses.
+     */
+    async removeRecord(serviceId: string, id: string): Promise<void> {
+        const view = this.session?.view(serviceId)
+
+        if (!view || view.writeRefusal) return
+
+        const answer = await this.dialogs.show('ask', {
+            title: 'Remove the record?',
+            text: `The record ${id} of "${view.path}" will be removed from the server. It cannot be undone.`,
+            choices: [
+                { value: 'cancel', label: 'Cancel' },
+                { value: 'remove', label: 'Remove', variant: 'danger' },
+            ],
+        })
+
+        if (answer !== 'remove') return
+
+        const rows = view.rows ?? []
+        const index = rows.findIndex(row => row.id === id)
+        const next = index < 0 ? undefined : (rows[index + 1] ?? rows[index - 1])
+
+        try {
+            await view.remove(id)
+        } catch (error) {
+            if (!(error instanceof WriteError)) throw error
+
+            await this.dialogs.show('ask', {
+                title: 'The record was not removed',
+                text: error.message,
+                choices: [{ value: 'ok', label: 'OK', variant: 'primary' }],
+            })
+
+            return
+        }
+        if (view.selectedId === id) view.select(next?.id ?? null)
     }
 
     /** Takes in an exported setup, once the user has said how. */

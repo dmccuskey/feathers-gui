@@ -6,13 +6,20 @@ import type { RecordEnvelope } from '../app/session.ts'
 import type { ViewSort } from '../app/setup.ts'
 import RecordsViewer from './RecordsViewer.vue'
 
-// What the viewer uses of a view: its path, its ID field, its selection and its sort
+// What the viewer uses of a view: its path, its ID field, the records it holds, its selection and its sort
 function fakeView(idField = 'id') {
     const view = reactive({
         path: 'messages',
         idField,
         selectedId: null as string | null,
         sort: { by: 'last-changed' } as ViewSort,
+        records: [] as RecordEnvelope[],
+        get selected(): RecordEnvelope | undefined {
+            return view.records.find(record => record.id === view.selectedId)
+        },
+        record(id: string) {
+            return view.records.find(record => record.id === id)
+        },
         select(id: string | null) {
             view.selectedId = id
         },
@@ -28,6 +35,8 @@ const envelopes = (...raws: Record<string, unknown>[]) =>
     raws.map(raw => ({ id: String(raw.id), raw }) satisfies RecordEnvelope)
 
 function mountViewer(view: ReturnType<typeof fakeView>, records: RecordEnvelope[]) {
+    view.records = records
+
     return mount(RecordsViewer, { props: { view: view as unknown as ServiceView, records } })
 }
 
@@ -110,4 +119,22 @@ test('the column sorted by is marked, and the rows are shown as given, the colum
         'descending',
         undefined,
     ])
+})
+
+test('Delete or Backspace asks for the selected record to be removed, when the view holds it', async () => {
+    const view = fakeView()
+    const wrapper = mountViewer(view, envelopes({ id: 1 }, { id: 2 }))
+    const grid = wrapper.find('[role="grid"]')
+
+    await grid.trigger('keydown', { key: 'Delete' })
+    expect(wrapper.emitted('remove')).toBeUndefined()
+
+    view.select('2')
+    await grid.trigger('keydown', { key: 'Delete' })
+    await grid.trigger('keydown', { key: 'Backspace' })
+    expect(wrapper.emitted('remove')).toEqual([['2'], ['2']])
+
+    view.select('9')
+    await grid.trigger('keydown', { key: 'Delete' })
+    expect(wrapper.emitted('remove')).toHaveLength(2)
 })

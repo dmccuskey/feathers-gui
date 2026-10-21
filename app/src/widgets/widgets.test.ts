@@ -8,6 +8,7 @@ import UiField from './UiField.vue'
 import UiInput from './UiInput.vue'
 import UiSelect from './UiSelect.vue'
 import UiTable from './UiTable.vue'
+import UiTextArea from './UiTextArea.vue'
 
 test('a button is a native button that does not submit, unless it is told to', () => {
     const plain = mount(UiButton, { slots: { default: 'Cancel' } })
@@ -159,4 +160,22 @@ test('a sortable table’s headers ask for a sort by their column; another table
     expect(sortable.find('[role="columnheader"]').text()).toBe('N▼')
 
     expect(mount(UiTable, { props }).find('[role="columnheader"] button').exists()).toBe(false)
+})
+
+test('a text area shows its value, gives back what is typed, and takes its field’s label and error', async () => {
+    const wrapper = mount(UiField, {
+        props: { label: 'Notes', error: 'Too long' },
+        slots: { default: () => h(UiTextArea, { modelValue: 'one\ntwo', mono: true }) },
+    })
+    const area = wrapper.find('textarea')
+
+    expect((area.element as HTMLTextAreaElement).value).toBe('one\ntwo')
+    expect(area.classes()).toContain('ui-text-area-mono')
+    expect(area.attributes('id')).toBe(wrapper.find('label').attributes('for'))
+    expect(area.attributes('aria-invalid')).toBe('true')
+
+    const alone = mount(UiTextArea)
+
+    await alone.setValue('three')
+    expect(alone.emitted('update:modelValue')).toEqual([['three']])
 })

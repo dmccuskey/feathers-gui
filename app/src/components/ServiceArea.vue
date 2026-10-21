@@ -1,8 +1,9 @@
 <script setup lang="ts">
 // The area of the current service. Until there is one, it says what is missing and offers the way to it. Of the
 // service it shows its view's records in the table, under a line of how many and whether they are live, and, for a
-// view loaded whole, the live search and the way back to sorting by last changed; a view not loaded whole is read
-// again each time the service is chosen. The records stay, dimmed, while the connection is being brought back.
+// view loaded whole, the live search and the way back to sorting by last changed, and for any view, New and Remove,
+// which can be pressed when the view can write; a view not loaded whole is read again each time the service is
+// chosen. The records stay, dimmed, while the connection is being brought back.
 import { computed, onUnmounted, watch } from 'vue'
 import { useApp } from '../app/app.ts'
 import { UiButton, UiInput } from '../widgets/index.ts'
@@ -28,6 +29,16 @@ const rows = computed(() => view.value?.rows ?? records.value ?? [])
 const lastChanged = computed(() => view.value?.sort.by === 'last-changed')
 const failure = computed(() => view.value?.status.error?.message ?? null)
 const line = computed(() => (view.value ? viewLine(view.value, status.value?.phase) : undefined))
+const refusal = computed(() => {
+    const why = view.value?.writeRefusal
+
+    return why === 'read-only' ? 'The server is set read-only' : why === 'not-ready' ? 'Not connected' : undefined
+})
+const removable = computed(() => view.value?.selected?.id)
+
+function removeRecord(id: string | undefined): void {
+    if (service.value && id !== undefined) void app.removeRecord(service.value.id, id)
+}
 
 // Escape empties the search, and leaves it to the dialog or whatever else is under it when it is empty already
 function clearSearch(event: KeyboardEvent): void {
@@ -96,8 +107,9 @@ onUnmounted(() => view.value?.shown(false))
                         <ServiceDot v-if="view?.isWhole" :view="view" />
                         {{ line }}
                     </p>
-                    <div v-if="view?.isWhole" class="service-area-tools">
+                    <div class="service-area-tools">
                         <UiInput
+                            v-if="view?.isWhole"
                             class="service-area-search"
                             type="search"
                             placeholder="Search"
@@ -109,7 +121,8 @@ onUnmounted(() => view.value?.shown(false))
                             @keydown.esc="clearSearch"
                         />
                         <UiButton
-                            class="service-area-last-changed"
+                            v-if="view?.isWhole"
+                            class="service-area-tool"
                             :class="{ 'service-area-on': lastChanged }"
                             variant="quiet"
                             :aria-pressed="lastChanged"
@@ -118,6 +131,27 @@ onUnmounted(() => view.value?.shown(false))
                         >
                             Last changed
                         </UiButton>
+                        <UiButton
+                            class="service-area-tool"
+                            variant="quiet"
+                            :disabled="refusal !== undefined"
+                            :title="refusal ?? 'Create a record'"
+                            @click="app.newRecord(service.id)"
+                        >
+                            New
+                        </UiButton>
+                        <UiButton
+                            class="service-area-tool"
+                            variant="quiet"
+                            :disabled="refusal !== undefined || removable === undefined"
+                            :title="
+                                refusal ??
+                                (removable === undefined ? 'Select a record to remove' : 'Remove the record selected')
+                            "
+                            @click="removeRecord(removable)"
+                        >
+                            Remove
+                        </UiButton>
                     </div>
                 </div>
                 <p v-if="records.length === 0" class="service-area-status">No records.</p>
@@ -125,7 +159,14 @@ onUnmounted(() => view.value?.shown(false))
                     No records have “{{ view.search.trim() }}”.
                 </p>
                 <div v-else class="service-area-records" :class="{ 'service-area-stale': status?.phase !== 'ready' }">
-                    <RecordsViewer v-if="view" :view="view" :records="records" :rows="rows" :fields="service.fields" />
+                    <RecordsViewer
+                        v-if="view"
+                        :view="view"
+                        :records="records"
+                        :rows="rows"
+                        :fields="service.fields"
+                        @remove="removeRecord"
+                    />
                 </div>
             </template>
         </template>
@@ -208,14 +249,14 @@ onUnmounted(() => view.value?.shown(false))
     font-size: 0.86em;
 }
 
-.service-area-last-changed {
+.service-area-tool {
     min-height: auto;
     padding-block: 0.2em;
     color: var(--ui-muted);
     font-size: 0.86em;
 }
 
-.service-area-last-changed.service-area-on {
+.service-area-tool.service-area-on {
     color: var(--ui-accent);
 }
 

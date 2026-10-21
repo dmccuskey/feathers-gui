@@ -11,9 +11,11 @@ import {
     type AppOptions,
     type LoginDialogInput,
     type PageVisibility,
+    type RecordDialogInput,
     type ServiceDialogInput,
 } from './app.ts'
 import type { OpenDialog } from './dialogs.ts'
+import type { ServiceView } from './service-view.ts'
 import { Session, type SessionParts } from './session.ts'
 import { Setup, type ServerSetup } from './setup.ts'
 
@@ -773,4 +775,113 @@ test('remembering a password, or changing the one remembered, does not replace t
     app.setup.updateServer(server.id, { login: LOGIN })
 
     expect(log).toEqual([])
+})
+
+/** An app with a session on `connection`, showing the service `messages` of it once read. */
+async function recordsApp(connection: ReturnType<typeof fakeConnection>) {
+    const app = new App({
+        storage: new FakeBrowser().open(),
+        makeSession: (server, parts) => new Session(server, { ...parts, makeConnection: () => connection }),
+        secrets: ALONE,
+    })
+    const server = app.setup.addServer(SERVER)
+    const service = app.setup.addService({ serverId: server.id, path: 'messages', load: 'auto', fields: [], pins: [] })
+
+    app.activateServer(server.id)
+    const view = app.session?.view(service.id) as ServiceView
+
+    void view.read()
+    for (let i = 0; i < 20; i++) await Promise.resolve()
+
+    return { app, server, service, view }
+}
+
+test('a new record starts from the columns but the ID field, and is selected once the server makes it', async () => {
+    const connection = fakeConnection({
+        services: { messages: [{ id: 1, text: 'one', likes: 3 }] },
+        onWrite: write => ({ id: 2, ...write.data }),
+    })
+    const { app, service, view } = await recordsApp(connection)
+    const flow = app.newRecord(service.id)
+
+    await Promise.resolve()
+
+    const input = app.dialogs.open[0]?.input as RecordDialogInput
+
+    expect(app.dialogs.open[0]?.kind).toBe('record')
+    expect(input.path).toBe('messages')
+    expect(input.record).toEqual({ text: '', likes: 0 })
+
+    await input.create({ text: 'two' })
+    app.dialogs.open[0]?.answer(null)
+    await flow
+
+    expect(connection.writes).toEqual([{ path: 'messages', method: 'create', data: { text: 'two' } }])
+    expect(view.selectedId).toBe('2')
+})
+
+test('a record is removed only once the user agrees, and the row after it is selected, or else the one before', async () => {
+    const connection = fakeConnection({
+        services: { messages: [{ id: 1 }, { id: 2 }, { id: 3 }] },
+        onWrite: write => ({ id: Number(write.id) }),
+    })
+    const { app, service, view } = await recordsApp(connection)
+
+    view.setSort({ by: 'field', field: 'id', descending: false })
+    view.select('2')
+
+    let flow = app.removeRecord(service.id, '2')
+    await Promise.resolve()
+    expect((app.dialogs.open[0]?.input as { text: string }).text).toBe(
+        'The record 2 of "messages" will be removed from the server. It cannot be undone.',
+    )
+    await answer(app, 'ask', 'cancel')
+    await flow
+    expect(connection.writes).toEqual([])
+
+    flow = app.removeRecord(service.id, '2')
+    await answer(app, 'ask', 'remove')
+    await flow
+    expect(connection.writes).toEqual([{ path: 'messages', method: 'remove', id: '2' }])
+    expect(view.selectedId).toBe('3')
+
+    connection.emit('messages', 'removed', { id: 2 })
+    flow = app.removeRecord(service.id, '3')
+    await answer(app, 'ask', 'remove')
+    await flow
+    expect(view.selectedId).toBe('1')
+})
+
+test('a record the server will not remove says why, and stays selected', async () => {
+    const connection = fakeConnection({
+        services: { messages: [{ id: 1 }] },
+        onWrite: () => {
+            throw new Error('Forbidden here')
+        },
+    })
+    const { app, service, view } = await recordsApp(connection)
+
+    view.select('1')
+
+    const flow = app.removeRecord(service.id, '1')
+    await answer(app, 'ask', 'remove')
+    for (let i = 0; i < 10; i++) await Promise.resolve()
+
+    expect((app.dialogs.open[0]?.input as { title: string; text: string }).title).toBe('The record was not removed')
+    expect((app.dialogs.open[0]?.input as { text: string }).text).toBe('Forbidden here')
+    await answer(app, 'ask', 'ok')
+    await flow
+    expect(view.selectedId).toBe('1')
+})
+
+test('no record is made or removed on a server set read-only: no dialog opens', async () => {
+    const connection = fakeConnection({ services: { messages: [{ id: 1 }] }, onWrite: () => ({ id: 1 }) })
+    const { app, server, service } = await recordsApp(connection)
+
+    app.setup.updateServer(server.id, { readOnly: true })
+    await app.newRecord(service.id)
+    await app.removeRecord(service.id, '1')
+
+    expect(app.dialogs.open).toEqual([])
+    expect(connection.writes).toEqual([])
 })
